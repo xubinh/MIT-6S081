@@ -1,22 +1,43 @@
 # 实验
 
-## 目录
+## <a id="toc"></a>目录
 
-## 重要提示
+<details open="open"><summary><a href="#1">重要提示</a></summary>
+</details>
+<details><summary><a href="#2">tools</a></summary>
+
+- <a href="#2.1">实验所需环境</a>
+- <a href="#2.2">搭建环境</a>
+  - <a href="#2.2.1">Ubuntu</a>
+    - <a href="#2.2.1.1">qemu-system-misc fix</a>
+  - <a href="#2.2.2">WSL2</a>
+- <a href="#2.3">测试所安装的环境</a>
+
+</details>
+<details><summary><a href="#3">guidance</a></summary>
+
+- <a href="#3.1">关于实验的难易程度</a>
+- <a href="#3.2">Debugging 技巧</a>
+
+</details>
+
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
+
+## <a id="1"></a>重要提示
 
 本仓库以分支的形式呈现各个 Lab 的实验结果, 请移步对应分支查看. main 分支主要用于存放通用注意事项.
 
-## tools
+## <a id="2"></a>tools
 
 - [link](https://pdos.csail.mit.edu/6.1810/2020/tools.html)
 
-### 实验所需环境
+### <a id="2.1"></a>实验所需环境
 
 > QEMU 5.1, GDB 8.3, GCC, and Binutils.
 
-### 搭建环境
+### <a id="2.2"></a>搭建环境
 
-#### Ubuntu
+#### <a id="2.2.1"></a>Ubuntu
 
 > Make sure you are running either "bullseye" or "sid" for your debian version (on ubuntu this can be checked by running `cat /etc/debian_version`), then run:
 >
@@ -28,7 +49,7 @@
 
 - ※注: 上面提到 QEMU 在 "buster" 版本的 Ubuntu 下太老了, 并未将其包含在命令行中, 因此还需要安装 qemu. 安装 qemu 直接执行命令 `sudo apt-get install qemu` 即可.
 
-##### qemu-system-misc fix
+##### <a id="2.2.1.1"></a>qemu-system-misc fix
 
 > At this moment in time, it seems that the package `qemu-system-misc` has received an update that breaks its compatibility with our kernel. If you run `make qemu` and the script appears to hang after
 > `qemu-system-riscv64 -machine virt -bios none -kernel kernel/kernel -m 128M -smp 3 -nographic -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0`
@@ -41,11 +62,13 @@
 
 - ※注: `qemu-system-misc=1:4.2-3ubuntu6` 是旧版本 Ubuntu 的包, 直接尝试安装会提示找不到此包, 是因为软件源中并没有旧版本 Ubuntu 的包仓库. 因此要做的是备份原软件源, 向其中添加旧版本 Ubuntu 的包仓库, 更新包数据库并安装 `qemu-system-misc=1:4.2-3ubuntu6`, 之后复原软件源. 这样做还有一个好处是不用自己处理依赖关系, 不过一定要在安装前备份整个系统以防新旧系统的包的依赖关系把系统搞崩了.
 
-#### WSL2
+#### <a id="2.2.2"></a>WSL2
 
 > We haven't tested it, but it might be possible to get everything you need via the Windows Subsystem for Linux or otherwise compiling the tools yourself.
 
-### 测试所安装的环境
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
+
+### <a id="2.3"></a>测试所安装的环境
 
 > To test your installation, you should be able to check the following:
 >
@@ -88,15 +111,17 @@
 
   根据补全结果来看应该选择 `riscv64-linux-gnu-gcc`.
 
-## guidance
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
+
+## <a id="3"></a>guidance
 
 - [link](https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html)
 
-### 关于实验的难易程度
+### <a id="3.1"></a>关于实验的难易程度
 
 - 实验通常不需要大量的代码 (一般只需几十到几百行代码), 难的地方在于概念, 因为概念很复杂, 在做实验之前务必确保完成所布置的教材和代码的阅读任务, 并了解相关文档.
 
-### Debugging 技巧
+### <a id="3.2"></a>Debugging 技巧
 
 - 通不过测试样例的时候记得多用 `printf`.
 - 在 qemu 中使用 `printf` 语句直接在终端里输出日志的话找起来会不方便, 因此推荐使用 `script` 程序运行 `make qemu`, 这个程序会将所有控制台输出输出至文件中, 这样找起来会比较方便一些.
