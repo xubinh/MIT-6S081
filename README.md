@@ -4,7 +4,7 @@
 
 <details open="open"><summary><a href="#1">重要提示</a></summary>
 </details>
-<details><summary><a href="#2">tools</a></summary>
+<details open="open"><summary><a href="#2">tools</a></summary>
 
 - <a href="#2.1">实验所需环境</a>
 - <a href="#2.2">搭建环境</a>
@@ -14,7 +14,7 @@
 - <a href="#2.3">测试所安装的环境</a>
 
 </details>
-<details><summary><a href="#3">guidance</a></summary>
+<details open="open"><summary><a href="#3">guidance</a></summary>
 
 - <a href="#3.1">关于实验的难易程度</a>
 - <a href="#3.2">Debugging 技巧</a>
