@@ -1,10 +1,21 @@
 # 实验
 
-## 目录
+## <a id="toc"></a>目录
 
-[TOC]
+<details open="open"><summary><a href="#1">评分相关</a></summary>
+</details>
+<details open="open"><summary><a href="#2">Lab util (得分: 100/100, 用时: 7h)</a></summary>
 
-## 评分相关
+- <a href="#2.1">Boot xv6 (easy)</a>
+- <a href="#2.2">sleep (easy)</a>
+- <a href="#2.3">pingpong (easy)</a>
+- <a href="#2.4">primes (moderate)/(hard)</a>
+- <a href="#2.5">find (moderate)</a>
+- <a href="#2.6">xargs (moderate)</a>
+
+</details>
+
+## <a id="1"></a>评分相关
 
 运行所有测试:
 
@@ -22,9 +33,11 @@ make grade
 make GRADEFLAGS=<function-name> grade
 ```
 
-## Lab util (得分: 100/100, 用时: 7h)
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-### Boot xv6 (easy)
+## <a id="2"></a>Lab util (得分: 100/100, 用时: 7h)
+
+### <a id="2.1"></a>Boot xv6 (easy)
 
 思路:
 
@@ -39,7 +52,7 @@ make GRADEFLAGS=<function-name> grade
 - xv6 中没有 `ps` 命令, 使用 `Ctrl-p` 代替.
 - 要退出 xv6 只需键入 `Ctrl-a x`.
 
-### sleep (easy)
+### <a id="2.2"></a>sleep (easy)
 
 核心函数是 `kernel/proc.c` 中的 `sleep` 函数:
 
@@ -112,7 +125,9 @@ sleep:
 1. 完成后将 `sleep` 函数追加到 Makefile 中的 `UPROGS` 变量中 (这个变量中包含的是一系列用户可调用的二进制程序, 例如 `echo` 和 `grep` 等等). 注意添加的形式是 `_sleep` 而不是 `sleep`. 之后 `make qemu` 会负责编译这个函数并能够在 shell 中调用该函数.
 1. 如果在编译的时候提示缺失如 `uint` 之类的类型, 这是因为 xv6 的源码中头文件的 include 是依赖先后顺序的, 可以通过在 included 的头文件中添加 `#ifndef` 预处理命令并在提示缺失类型的文件中 include 进来的方法解决.
 
-### pingpong (easy)
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
+
+### <a id="2.3"></a>pingpong (easy)
 
 实验要求很明确, 目的是为了熟悉 `fork` 创建进程, `pipe` 创建命名管道以便进程间通信, `read` 和 `write` 进行读写, `getpid` 获取当前进程 ID.
 
@@ -203,7 +218,9 @@ int main() {
 }
 ```
 
-### primes (moderate)/(hard)
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
+
+### <a id="2.4"></a>primes (moderate)/(hard)
 
 实验要求实现一个埃氏筛法来打印素数, 但不是通过一般的循环语句实现, 而是通过进程间通信的形式将本轮循环中的结果传递给下一个进程处理.
 
@@ -335,7 +352,9 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-### find (moderate)
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
+
+### <a id="2.5"></a>find (moderate)
 
 实验的目的是为了熟悉文件系统相关的系统调用以及文件路径处理.
 
@@ -491,7 +510,9 @@ int main(int argc, char *argv[]) {
 }
 ```
 
-### xargs (moderate)
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
+
+### <a id="2.6"></a>xargs (moderate)
 
 要求实现一个简单版本的 `xargs` 程序, 作用是从标准输入读取文本, 将文本内容中的每一行作为一个单独的参数传递给 `xargs` 的参数所指明的程序. 通过 `xargs` 的参数可以为所指明的程序预先指定若干个固定参数, 而从 `xargs` 的标准输入中读取到的单独参数应该追加在这些固定参数之后. 例如
 
@@ -597,3 +618,5 @@ int main(int argc, char *argv[]) {
     exit(0);
 }
 ```
+
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
