@@ -2,42 +2,38 @@
 
 ## <a id="toc"></a>目录
 
-<details open="open"><summary><a href="#1">重要提示</a></summary>
-</details>
-<details open="open"><summary><a href="#2">tools</a></summary>
+<details open="open"><summary><a href="#1">工具</a></summary>
 
-- <a href="#2.1">实验所需环境</a>
-- <a href="#2.2">搭建环境</a>
-  - <a href="#2.2.1">Ubuntu</a>
-    - <a href="#2.2.1.1">qemu-system-misc fix</a>
-  - <a href="#2.2.2">WSL2</a>
-- <a href="#2.3">测试所安装的环境</a>
+- <a href="#1.1">实验所需环境</a>
+- <a href="#1.2">环境搭建</a>
+  - <a href="#1.2.1">Ubuntu 下</a>
+    - <a href="#1.2.1.1">qemu-system-misc fix</a>
+  - <a href="#1.2.2">WSL2 下</a>
+- <a href="#1.3">测试环境是否安装成功</a>
 
 </details>
-<details open="open"><summary><a href="#3">guidance</a></summary>
+<details open="open"><summary><a href="#2">实验指南</a></summary>
 
-- <a href="#3.1">关于实验的难易程度</a>
-- <a href="#3.2">Debugging 技巧</a>
+- <a href="#2.1">关于实验的难易程度</a>
+- <a href="#2.2">Debugging 技巧</a>
 
 </details>
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-## <a id="1"></a>重要提示
+## <a id="1"></a>工具
 
-本仓库以分支的形式呈现各个 Lab 的实验结果, 请移步对应分支查看. main 分支主要用于存放通用注意事项.
+参考资料:
 
-## <a id="2"></a>tools
+- [6.S081 / Fall 2020](https://pdos.csail.mit.edu/6.1810/2020/tools.html)
 
-- [link](https://pdos.csail.mit.edu/6.1810/2020/tools.html)
-
-### <a id="2.1"></a>实验所需环境
+### <a id="1.1"></a>实验所需环境
 
 > QEMU 5.1, GDB 8.3, GCC, and Binutils.
 
-### <a id="2.2"></a>搭建环境
+### <a id="1.2"></a>环境搭建
 
-#### <a id="2.2.1"></a>Ubuntu
+#### <a id="1.2.1"></a>Ubuntu 下
 
 > Make sure you are running either "bullseye" or "sid" for your debian version (on ubuntu this can be checked by running `cat /etc/debian_version`), then run:
 >
@@ -47,9 +43,11 @@
 >
 > (The version of QEMU on "buster" is too old, so you'd have to get that separately.)
 
-- ※注: 上面提到 QEMU 在 "buster" 版本的 Ubuntu 下太老了, 并未将其包含在命令行中, 因此还需要安装 qemu. 安装 qemu 直接执行命令 `sudo apt-get install qemu` 即可.
+> [!IMPORTANT]
+>
+> - 上面给出的命令并没有安装 qemu, 因此还需要手动安装一下. 直接执行命令 `sudo apt-get install qemu` 即可.
 
-##### <a id="2.2.1.1"></a>qemu-system-misc fix
+##### <a id="1.2.1.1"></a>qemu-system-misc fix
 
 > At this moment in time, it seems that the package `qemu-system-misc` has received an update that breaks its compatibility with our kernel. If you run `make qemu` and the script appears to hang after
 > `qemu-system-riscv64 -machine virt -bios none -kernel kernel/kernel -m 128M -smp 3 -nographic -drive file=fs.img,if=none,format=raw,id=x0 -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0`
@@ -60,15 +58,24 @@
 > sudo apt-get install qemu-system-misc=1:4.2-3ubuntu6
 > ```
 
-- ※注: `qemu-system-misc=1:4.2-3ubuntu6` 是旧版本 Ubuntu 的包, 直接尝试安装会提示找不到此包, 是因为软件源中并没有旧版本 Ubuntu 的包仓库. 因此要做的是备份原软件源, 向其中添加旧版本 Ubuntu 的包仓库, 更新包数据库并安装 `qemu-system-misc=1:4.2-3ubuntu6`, 之后复原软件源. 这样做还有一个好处是不用自己处理依赖关系, 不过一定要在安装前备份整个系统以防新旧系统的包的依赖关系把系统搞崩了.
+> [!IMPORTANT]
+>
+> - `qemu-system-misc=1:4.2-3ubuntu6` 是旧版本 Ubuntu 的包, 直接尝试安装会提示 "找不到此包", 这是因为软件源中并没有旧版本 Ubuntu 的包仓库. 一个可行的解决方法如下:
+>   1. 首先备份软件源 `/etc/apt/sources.list`.
+>   1. 向软件源 `/etc/apt/sources.list` 中添加旧版本 Ubuntu 的包仓库.
+>   1. 执行命令 `sudo apt-get update` 更新数据库.
+>   1. 安装 `qemu-system-misc=1:4.2-3ubuntu6`.
+>   1. 复原软件源.
+>
+>   这种方法的好处是不用自己处理依赖关系, 不过一定要在安装前备份整个系统以防新旧系统的包的依赖关系把系统搞崩了.
 
-#### <a id="2.2.2"></a>WSL2
+#### <a id="1.2.2"></a>WSL2 下
 
 > We haven't tested it, but it might be possible to get everything you need via the Windows Subsystem for Linux or otherwise compiling the tools yourself.
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-### <a id="2.3"></a>测试所安装的环境
+### <a id="1.3"></a>测试环境是否安装成功
 
 > To test your installation, you should be able to check the following:
 >
@@ -93,35 +100,40 @@
 >
 > To quit qemu type: Ctrl-a x.
 
-- ※注: 上面运行的是 `riscv64-unknown-elf-gcc`, 然而在自己的 WSL2/Ubuntu 下执行时却报错 "command not found: riscv64-unknown-elf-gcc". 输入 risc 并 tab 补全发现是有相应程序的:
-
-  ```text
-   xbhuang@huangxb-laptop  ~  riscv64-linux-gnu-                                                            riscv64-linux-gnu-addr2line      riscv64-linux-gnu-gcc-nm         riscv64-linux-gnu-ld
-  riscv64-linux-gnu-ar             riscv64-linux-gnu-gcc-nm-11      riscv64-linux-gnu-ld.bfd
-  riscv64-linux-gnu-as             riscv64-linux-gnu-gcc-ranlib     riscv64-linux-gnu-lto-dump-11
-  riscv64-linux-gnu-c++filt        riscv64-linux-gnu-gcc-ranlib-11  riscv64-linux-gnu-nm
-  riscv64-linux-gnu-cpp            riscv64-linux-gnu-gcov           riscv64-linux-gnu-objcopy
-  riscv64-linux-gnu-cpp-11         riscv64-linux-gnu-gcov-11        riscv64-linux-gnu-objdump
-  riscv64-linux-gnu-elfedit        riscv64-linux-gnu-gcov-dump      riscv64-linux-gnu-ranlib
-  riscv64-linux-gnu-gcc            riscv64-linux-gnu-gcov-dump-11   riscv64-linux-gnu-readelf
-  riscv64-linux-gnu-gcc-11         riscv64-linux-gnu-gcov-tool      riscv64-linux-gnu-size
-  riscv64-linux-gnu-gcc-ar         riscv64-linux-gnu-gcov-tool-11   riscv64-linux-gnu-strings
-  riscv64-linux-gnu-gcc-ar-11      riscv64-linux-gnu-gprof          riscv64-linux-gnu-strip
-  ```
-
-  根据补全结果来看应该选择 `riscv64-linux-gnu-gcc`.
+> [!IMPORTANT]
+>
+> - 上面运行的是 `riscv64-unknown-elf-gcc`, 然而在 WSL2 下执行时却报错 "command not found: riscv64-unknown-elf-gcc". 输入 `risc` 并 tab 补全发现是有相应程序的:
+>
+>   ```text
+>   $ riscv64-linux-gnu-                                                            
+>   riscv64-linux-gnu-addr2line      riscv64-linux-gnu-gcc-nm         riscv64-linux-gnu-ld
+>   riscv64-linux-gnu-ar             riscv64-linux-gnu-gcc-nm-11      riscv64-linux-gnu-ld.bfd
+>   riscv64-linux-gnu-as             riscv64-linux-gnu-gcc-ranlib     riscv64-linux-gnu-lto-dump-11
+>   riscv64-linux-gnu-c++filt        riscv64-linux-gnu-gcc-ranlib-11  riscv64-linux-gnu-nm
+>   riscv64-linux-gnu-cpp            riscv64-linux-gnu-gcov           riscv64-linux-gnu-objcopy
+>   riscv64-linux-gnu-cpp-11         riscv64-linux-gnu-gcov-11        riscv64-linux-gnu-objdump
+>   riscv64-linux-gnu-elfedit        riscv64-linux-gnu-gcov-dump      riscv64-linux-gnu-ranlib
+>   riscv64-linux-gnu-gcc            riscv64-linux-gnu-gcov-dump-11   riscv64-linux-gnu-readelf
+>   riscv64-linux-gnu-gcc-11         riscv64-linux-gnu-gcov-tool      riscv64-linux-gnu-size
+>   riscv64-linux-gnu-gcc-ar         riscv64-linux-gnu-gcov-tool-11   riscv64-linux-gnu-strings
+>   riscv64-linux-gnu-gcc-ar-11      riscv64-linux-gnu-gprof          riscv64-linux-gnu-strip
+>   ```
+> 
+>   根据上述结果来看应该执行 `riscv64-linux-gnu-gcc`.
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-## <a id="3"></a>guidance
+## <a id="2"></a>实验指南
 
-- [link](https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html)
+参考资料:
 
-### <a id="3.1"></a>关于实验的难易程度
+- [Lab guidance](https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html)
+
+### <a id="2.1"></a>关于实验的难易程度
 
 - 实验通常不需要大量的代码 (一般只需几十到几百行代码), 难的地方在于概念, 因为概念很复杂, 在做实验之前务必确保完成所布置的教材和代码的阅读任务, 并了解相关文档.
 
-### <a id="3.2"></a>Debugging 技巧
+### <a id="2.2"></a>Debugging 技巧
 
 - 通不过测试样例的时候记得多用 `printf`.
 - 在 qemu 中使用 `printf` 语句直接在终端里输出日志的话找起来会不方便, 因此推荐使用 `script` 程序运行 `make qemu`, 这个程序会将所有控制台输出输出至文件中, 这样找起来会比较方便一些.
