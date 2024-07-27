@@ -1,5 +1,12 @@
 # 实验
 
+> [!IMPORTANT]
+>
+> - 根据 MIT 6.s081 lab 的形式, 本项目使用不同分支分别展现各个 lab 的实验结果, 具体请移步对应分支查看.
+> - 本页面的内容摘自 (翻译自) 以下参考资料:
+>   - [工具](https://pdos.csail.mit.edu/6.1810/2020/tools.html)
+>   - [实验指南](https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html)
+
 ## <a id="toc"></a>目录
 
 <details open="open"><summary><a href="#1">工具</a></summary>
@@ -18,13 +25,6 @@
 - <a href="#2.2">Debugging 技巧</a>
 
 </details>
-
-> [!IMPORTANT]
->
-> - 根据 MIT 6.s081 lab 的形式, 本项目使用不同分支分别展现各个 lab 的实验结果, 具体请移步对应分支查看.
-> - 本页面的内容摘自 (翻译自) 以下参考资料:
->   - [工具](https://pdos.csail.mit.edu/6.1810/2020/tools.html)
->   - [实验指南](https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html)
 
 ## <a id="1"></a>工具
 
