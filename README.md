@@ -2,6 +2,8 @@
 
 > [!IMPORTANT]
 >
+> - xv6 教材笔记请移步至[博客](https://xubinh.github.io/tags/xv6/).
+>
 > - 根据实验的设计形式, 本项目使用独立的分支分别展现各个实验的结果, 具体请移步至对应分支查看:
 >   - [Lab Utilities](https://github.com/xubinh/MIT-6S081/tree/util)
 >   - [Lab System calls](https://github.com/xubinh/MIT-6S081/tree/syscall)
@@ -14,8 +16,6 @@
 >   - Lab File system [TODO]
 >   - Lab mmap [TODO]
 >   - Lab network driver [TODO]
->
-> - xv6 教材笔记请移步至[博客](https://xubinh.github.io/tags/xv6/).
 
 本分支的主要内容为实验的一般注意事项.
 
