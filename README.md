@@ -1,9 +1,25 @@
-# 实验
+# <div align="center">Notes for xv6/MIT 6.S081 Labs</div>
 
 > [!IMPORTANT]
 >
-> - 根据 MIT 6.s081 lab 的形式, 本项目使用不同分支分别展现各个 lab 的实验结果, 具体请移步对应分支查看.
-> - 本页面的内容摘自 (翻译自) 以下资料:
+> - 根据实验的设计形式, 本项目使用独立的分支分别展现各个实验的结果, 具体请移步至对应分支查看:
+>   - [Lab Utilities](https://github.com/xubinh/MIT-6S081/tree/util)
+>   - [Lab System calls](https://github.com/xubinh/MIT-6S081/tree/syscall)
+>   - Lab Page tables [TODO]
+>   - Lab Traps [TODO]
+>   - Lab Lazy allocation [TODO]
+>   - Lab Copy on-write [TODO]
+>   - Lab Multithreading [TODO]
+>   - Lab Lock [TODO]
+>   - Lab File system [TODO]
+>   - Lab mmap [TODO]
+>   - Lab network driver [TODO]
+
+本分支的主要内容为实验的一般注意事项.
+
+> [!NOTE]
+>
+> - 本分支的内容均摘自 (或翻译自) 以下官方资料:
 >   - [工具](https://pdos.csail.mit.edu/6.1810/2020/tools.html)
 >   - [实验指南](https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html)
 
@@ -48,7 +64,9 @@
 >
 > (The version of QEMU on "buster" is too old, so you'd have to get that separately.)
 
-> [!IMPORTANT]
+主要是安装 QEMU 以及一系列编译工具.
+
+> [!NOTE]
 >
 > - 上面给出的命令并没有安装 qemu, 因此还需要手动安装一下. 直接执行命令 `sudo apt-get install qemu` 即可.
 
@@ -63,7 +81,9 @@
 > sudo apt-get install qemu-system-misc=1:4.2-3ubuntu6
 > ```
 
-> [!IMPORTANT]
+最新版本的 `qemu-system-misc` 包与 xv6 的源码之间可能存在兼容性问题, 需要对 `qemu-system-misc` 包进行手动降级.
+
+> [!NOTE]
 >
 > - `qemu-system-misc=1:4.2-3ubuntu6` 是旧版本 Ubuntu 的包, 直接尝试安装会提示 "找不到此包", 这是因为软件源中并没有旧版本 Ubuntu 的包仓库. 一个可行的解决方法如下:
 >   1. 首先备份软件源 `/etc/apt/sources.list`.
@@ -105,7 +125,9 @@
 >
 > To quit qemu type: Ctrl-a x.
 
-> [!IMPORTANT]
+主要是检查 riscv64-gcc 和 qemu 是否安装正常.
+
+> [!NOTE]
 >
 > - 上面运行的是 `riscv64-unknown-elf-gcc`, 然而在 WSL2 下执行时却报错 "command not found: riscv64-unknown-elf-gcc". 输入 `risc` 并 tab 补全发现是有相应程序的:
 >
