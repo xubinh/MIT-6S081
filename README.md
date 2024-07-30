@@ -2,7 +2,7 @@
 
 > [!NOTE]
 >
-> xv6 教材笔记请移步至[博客](https://xubinh.github.io/tags/xv6/)
+> xv6 教材笔记请移步至[博客](https://xubinh.github.io/tags/xv6/).
 
 ## <a id="toc"></a>目录
 
