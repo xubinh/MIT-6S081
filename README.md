@@ -14,6 +14,8 @@
 >   - Lab File system [TODO]
 >   - Lab mmap [TODO]
 >   - Lab network driver [TODO]
+>
+> - xv6 教材笔记请移步至[博客](https://xubinh.github.io/tags/xv6/).
 
 本分支的主要内容为实验的一般注意事项.
 
