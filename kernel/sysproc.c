@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
 
 uint64 sys_exit(void) {
     int n;
@@ -90,6 +91,47 @@ uint64 sys_trace(void) {
     }
 
     set_trace_mask(trace_mask);
+
+    return 0;
+}
+
+uint64 sys_sysinfo(void) {
+    struct sysinfo *sysinfo_ptr;
+    uint64 current_total_free_memory_in_bytes;
+    uint64 current_total_number_of_used_processes;
+
+    if (argaddr(0, (uint64 *)&sysinfo_ptr) < 0) {
+        return -1;
+    }
+
+    current_total_free_memory_in_bytes =
+        get_current_total_free_memory_in_bytes();
+    current_total_number_of_used_processes =
+        get_current_total_number_of_used_processes();
+
+    struct proc *p = myproc();
+
+    if (copyout(
+            p->pagetable,
+            (uint64)(&sysinfo_ptr->freemem),
+            (char *)&current_total_free_memory_in_bytes,
+            sizeof(uint64)
+        )
+        == -1) {
+
+        return -1;
+    }
+
+    if (copyout(
+            p->pagetable,
+            (uint64)(&sysinfo_ptr->nproc),
+            (char *)&current_total_number_of_used_processes,
+            sizeof(uint64)
+        )
+        == -1) {
+
+        return -1;
+    }
 
     return 0;
 }

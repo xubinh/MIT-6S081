@@ -63,6 +63,7 @@ void ramdiskrw(struct buf *);
 void *kalloc(void);
 void kfree(void *);
 void kinit(void);
+uint64 get_current_total_free_memory_in_bytes(void);
 
 // log.c
 void initlog(int, struct superblock *);
@@ -105,6 +106,7 @@ int either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void procdump(void);
 void set_trace_mask(int);
+uint64 get_current_total_number_of_used_processes(void);
 
 // swtch.S
 void swtch(struct context *, struct context *);

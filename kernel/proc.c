@@ -660,3 +660,18 @@ void procdump(void) {
 void set_trace_mask(int trace_mask) {
     myproc()->trace_mask = trace_mask;
 }
+
+uint64 get_current_total_number_of_used_processes(void) {
+    struct proc *p;
+    uint64 current_total_number_of_used_processes = 0;
+
+    for (p = proc; p < &proc[NPROC]; p++) {
+        acquire(&p->lock);
+        if (p->state != UNUSED) {
+            current_total_number_of_used_processes++;
+        }
+        release(&p->lock);
+    }
+
+    return current_total_number_of_used_processes;
+}
