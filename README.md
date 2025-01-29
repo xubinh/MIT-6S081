@@ -1,94 +1,105 @@
 # Lab Utilities
 
-> [!NOTE]
->
-> xv6 教材笔记请移步至[博客](https://xubinh.github.io/tags/xv6/).
-
 ## <a id="toc"></a>目录
 
-<details open="open"><summary><a href="#1">评分相关</a></summary>
-</details>
-<details open="open"><summary><a href="#2">Lab util (得分: 100/100, 用时: 7h)</a></summary>
+<details open="open"><summary><a href="#1">Lab util (得分: 100/100)</a></summary>
 
-- <a href="#2.1">Boot xv6 (easy)</a>
-- <a href="#2.2">sleep (easy)</a>
-- <a href="#2.3">pingpong (easy)</a>
-- <a href="#2.4">primes (moderate)/(hard)</a>
-- <a href="#2.5">find (moderate)</a>
-- <a href="#2.6">xargs (moderate)</a>
+- <a href="#1.1">Boot xv6 (easy)</a>
+- <a href="#1.2">sleep (easy)</a>
+- <a href="#1.3">pingpong (easy)</a>
+- <a href="#1.4">primes (moderate)/(hard)</a>
+- <a href="#1.5">find (moderate)</a>
+- <a href="#1.6">xargs (moderate)</a>
 
 </details>
+<details open="open"><summary><a href="#2">测试与评分相关</a></summary>
+</details>
 
-## <a id="1"></a>评分相关
+## <a id="1"></a>Lab util (得分: 100/100)
 
-运行所有测试:
+### <a id="1.1"></a>Boot xv6 (easy)
 
-```bash
-make grade
-```
-
-运行单个测试:
-
-```bash
-# 方法一:
-./grade-lab-util <function-name>
-
-# 方法二:
-make GRADEFLAGS=<function-name> grade
-```
-
-<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
-
-## <a id="2"></a>Lab util (得分: 100/100, 用时: 7h)
-
-### <a id="2.1"></a>Boot xv6 (easy)
-
-思路:
+开机过程概述:
 
 - 搭建环境;
 - 克隆仓库;
-- git checkout 到 util 分支;
+- `git checkout` 至 `util` 分支;
 - `make qemu` 开机.
 
-其他:
+一些注意事项:
 
-- `ls` 命令列出当前目录下的文件.
-- xv6 中没有 `ps` 命令, 使用 `Ctrl-p` 代替.
-- 要退出 xv6 只需键入 `Ctrl-a x`.
+- 可以使用 `ls` 命令列出当前目录下的文件.
+- xv6 中没有 `ps` 命令, 可以使用 `Ctrl-p` 替代.
+- 输入 `Ctrl-a` + `x` 即可退出 xv6.
 
-### <a id="2.2"></a>sleep (easy)
+### <a id="1.2"></a>sleep (easy)
 
-核心函数是 `kernel/proc.c` 中的 `sleep` 函数:
+内核中与进程睡眠有关的核心函数是位于文件 `kernel/proc.c` 中的 `sleep` 函数 (以下代码摘自该文件):
 
-- `sleep` 函数的作用就是在确保原子性的前提下将进程标记为 "睡眠 (`SLEEPING`)", 叫调度器启动另一个进程, 然后等待被唤醒.
-- 参数 `chan` 即 `channel`, 表明进程睡眠的原因, 或等价的, 睡眠的队列.
-- 参数 `lk` 即 `lock`, 是进程在请求睡眠之前需要获取的锁. 这个锁的类型是 `spinlock`, 意思是进程会不断尝试获取这个锁直到获取成功, 而不是在获取不到的时候被迫阻塞 (睡眠). 暂时不知道为什么进程在睡眠之前必须要获取一个锁.
-- 第 14 行到第 17 行先获取进程锁再释放传入的锁, 而第 29 到第 32 行却先释放进程锁再重新获取传入的锁. 暂时不知道这是为什么. 可能与自己不知道的一些背后的机制以及死锁有关.
+```c
+// Atomically release lock and sleep on chan.
+// Reacquires lock when awakened.
+void
+sleep(void *chan, struct spinlock *lk)
+{
+  struct proc *p = myproc();
+  
+  // Must acquire p->lock in order to
+  // change p->state and then call sched.
+  // Once we hold p->lock, we can be
+  // guaranteed that we won't miss any wakeup
+  // (wakeup locks p->lock),
+  // so it's okay to release lk.
+  if(lk != &p->lock){  //DOC: sleeplock0
+    acquire(&p->lock);  //DOC: sleeplock1
+    release(lk);
+  }
 
-内核 `kernel/sysproc.c` 中的系统调用 `sys_sleep` 的作用是获取用户传入的 tick 数, 然后调用上述 `sleep` 函数:
+  // Go to sleep.
+  p->chan = chan;
+  p->state = SLEEPING;
+
+  sched();
+
+  // Tidy up.
+  p->chan = 0;
+
+  // Reacquire original lock.
+  if(lk != &p->lock){
+    release(&p->lock);
+    acquire(lk);
+  }
+}
+```
+
+- `sleep` 函数用于原子性地将进程挂起并让出执行权给调度器, 然后等待被调度器重新唤醒.
+- 参数 `chan` 即 `channel`, 表明进程所睡眠在的队列, 但这个 "队列" 是逻辑上的队列, 实际上内核直接使用一个指针来标记队列, 并未使用任何其他数据结构.
+- 参数 `lk` 即 `lock`, 是进程在请求睡眠之前需要获取的锁.
+
+文件 `kernel/sysproc.c` 中的系统调用 `sys_sleep` 的作用是获取用户传入的 tick 数, 然后调用上述 `sleep` 函数 (以下代码摘自该文件):
 
 ```c
 uint64 sys_sleep(void) {
     int n;
     uint ticks0;
 
-    // 获取用户传入的参数中的第一个参数并解释为 int 类型:
+    // 获取用户传入的参数中的第一个参数并解释为 int 类型
     if (argint(0, &n) < 0) {
         return -1;
     }
 
-    // 计时开始:
-    acquire(&tickslock); // tickslock 应该是大家共用的
+    // 计时开始
+    acquire(&tickslock);
     ticks0 = ticks;
 
-    // 一直睡眠直到睡够时间:
+    // 不断睡眠, 直至超出预定时间
     while (ticks - ticks0 < n) {
         if (myproc()->killed) {
             release(&tickslock);
             return -1;
         }
 
-        sleep(&ticks, &tickslock); // 这个 sleep 函数负责获取当前 CPU 核心的锁并调用 sched 函数把任务交给调度器
+        sleep(&ticks, &tickslock); // 此处调用了核心函数 `sleep`
     }
 
     release(&tickslock);
@@ -123,15 +134,16 @@ sleep:
 
 一些注意事项:
 
-1. 所实现的文件路径为 `user/sleep.c`.
-1. 可以使用 `user/ulib.c` 中的 `atoi` 函数将字符串转换为整数.
-1. `main` 函数必须以 `exit()` 系统调用结尾. 这里不知道为什么不是以 `return 0` 结尾.
-1. 完成后将 `sleep` 函数追加到 Makefile 中的 `UPROGS` 变量中 (这个变量中包含的是一系列用户可调用的二进制程序, 例如 `echo` 和 `grep` 等等). 注意添加的形式是 `_sleep` 而不是 `sleep`. 之后 `make qemu` 会负责编译这个函数并能够在 shell 中调用该函数.
-1. 如果在编译的时候提示缺失如 `uint` 之类的类型, 这是因为 xv6 的源码中头文件的 include 是依赖先后顺序的, 可以通过在 included 的头文件中添加 `#ifndef` 预处理命令并在提示缺失类型的文件中 include 进来的方法解决.
+- **`main` 函数必须以系统调用 `exit` 结尾**.
+- 可以使用 `user/ulib.c` 中的 `atoi` 函数将字符串转换为整数.
+- 完成后将 `sleep` 函数追加到 Makefile 中的 `UPROGS` 变量中 (这个变量中包含的是一系列用户可调用的二进制程序, 例如 `echo` 和 `grep` 等等). 注意添加的形式是 `_sleep` 而不是 `sleep`. 之后 `make qemu` 会负责编译这个函数并能够在 shell 中调用该函数.
+- 如果在编译的时候提示缺失如 `uint` 之类的类型, 这是因为 xv6 的源码中头文件的 include 是依赖先后顺序的, 可以通过在头文件中添加 `#ifndef` 预处理命令并手动 include 的方法解决.
+
+具体代码见文件 [user/sleep.c](user/sleep.c).
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-### <a id="2.3"></a>pingpong (easy)
+### <a id="1.3"></a>pingpong (easy)
 
 实验要求很明确, 目的是为了熟悉 `fork` 创建进程, `pipe` 创建命名管道以便进程间通信, `read` 和 `write` 进行读写, `getpid` 获取当前进程 ID.
 
@@ -144,87 +156,13 @@ sleep:
 
 一些注意事项:
 
-1. 所实现的文件路径为 `user/pingpong.c`.
-1. `printf` 只识别 `%d, %x, %p, %s`.
+- `printf` 只识别 `%d, %x, %p, %s`.
 
-代码:
-
-```c
-#include "user/user.h"
-
-int main() {
-    // 提前创建好两个管道:
-    int parent_to_child_pipe[2];
-    int child_to_parent_pipe[2];
-    pipe(parent_to_child_pipe);
-    pipe(child_to_parent_pipe);
-
-    if (fork() == 0) {
-        int pid = getpid();
-
-        // 关闭不需要的管道:
-        close(parent_to_child_pipe[1]);
-        close(child_to_parent_pipe[0]);
-
-        char a_byte;
-
-        // 从父进程读取一个字节:
-        if (read(parent_to_child_pipe[0], &a_byte, 1) < 0) {
-            fprintf(2, "child read error\n");
-            exit(1);
-        }
-
-        printf("%d: received ping\n", pid);
-
-        // 写回该字节至父进程:
-        if (write(child_to_parent_pipe[1], &a_byte, 1) < 0) {
-            fprintf(2, "child write error\n");
-            exit(1);
-        }
-
-        // 清理垃圾:
-        close(parent_to_child_pipe[0]);
-        close(child_to_parent_pipe[1]);
-
-        exit(0);
-    }
-
-    // 父进程:
-    else {
-        int pid = getpid();
-
-        // 关闭不需要的管道:
-        close(parent_to_child_pipe[0]);
-        close(child_to_parent_pipe[1]);
-
-        char a_byte = -1;
-
-        // 向子进程写入一个字节:
-        if (write(parent_to_child_pipe[1], &a_byte, 1) < 0) {
-            fprintf(2, "parent write error\n");
-            exit(1);
-        }
-
-        // 从子进程读取返回的字节:
-        if (read(child_to_parent_pipe[0], &a_byte, 1) < 0) {
-            fprintf(2, "parent read error\n");
-            exit(1);
-        }
-
-        printf("%d: received pong\n", pid);
-
-        // 清理垃圾:
-        close(parent_to_child_pipe[1]);
-        close(child_to_parent_pipe[0]);
-
-        exit(0);
-    }
-}
-```
+具体代码见文件 [user/pingpong.c](user/pingpong.c).
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-### <a id="2.4"></a>primes (moderate)/(hard)
+### <a id="1.4"></a>primes (moderate)/(hard)
 
 实验要求实现一个埃氏筛法来打印素数, 但不是通过一般的循环语句实现, 而是通过进程间通信的形式将本轮循环中的结果传递给下一个进程处理.
 
@@ -234,131 +172,16 @@ int main() {
 - 主进程和所有子进程的分工很明确, 前者负责启动子进程链并输入所有整数, 每个子进程负责从自己的父进程读取输入, 输出传入的第一个整数即素数, 然后一旦发现有整数没有被筛掉便创建一个子进程并将该整数和接下来所有没有被筛掉的整数输入给该子进程.
 - 关键是如何配合 `fork` 编织子进程的逻辑. 由于每个新创建的子进程均需要重新回到相同的入口开始执行, 因此可以用函数将子进程的逻辑抽象出来并在 `fork` 之后调用. 但这样做会导致用户栈随着子进程链的推进而不断增大, 因此可以选择通过 `while` 循环配合 `continue` 或者直接 `goto` 的方法实现.
 
-注意事项:
+一些注意事项:
 
-1. 所实现的文件路径为 `user/primes.c`.
-1. 注意使用 `wait` 等待的是直接子进程, 子进程创建的子进程不算在父进程的直接子进程中.
-1. 父进程需要在等待子进程之前将管道的写端先关闭, 否则子进程会由于读取不到 EOF 而一直阻塞从而卡死整个程序.
+- 注意使用 `wait` 等待的是直接子进程, 子进程创建的子进程不算在父进程的直接子进程中.
+- 父进程需要在等待子进程之前将管道的写端先关闭, 否则子进程会由于读取不到 EOF 而一直阻塞从而卡死整个进程.
 
-代码:
-
-```c
-#include "user/user.h"
-
-int main(int argc, char *argv[]) {
-    int left_pipe[2], right_pipe[2];
-
-    // 先创建右边的管道:
-    pipe(right_pipe);
-
-    // 子进程:
-    if (fork() == 0) {
-    child_entrance:
-        // 关闭管道的写端并将其移动至左边:
-        close(right_pipe[1]);
-        left_pipe[0] = right_pipe[0];
-
-        int prime_number;
-
-        // 从左边 (父进程) 读取第一个整数即素数:
-        if (read(left_pipe[0], &prime_number, sizeof(int)) < 0) {
-            fprintf(2, "child %d read error\n", getpid());
-            exit(1);
-        }
-
-        printf("prime %d\n", prime_number);
-
-        int number;
-        int read_status;
-        int has_created_child_process = 0;
-
-        // 不断从左边读取整数:
-        while ((read_status = read(left_pipe[0], &number, sizeof(int))) > 0) {
-            // 如果该整数能够被筛掉则跳过:
-            if (number % prime_number == 0) {
-                continue;
-            }
-
-            // 否则视情况创建子进程:
-            if (!has_created_child_process) {
-                has_created_child_process = 1;
-
-                // 创建右边的管道:
-                pipe(right_pipe);
-
-                // 如果是子进程:
-                if (fork() == 0) {
-                    // 重新开始逻辑:
-                    goto child_entrance;
-                }
-
-                // 如果是父进程:
-                else {
-                    // 关闭管道的读端:
-                    close(right_pipe[0]);
-                }
-            }
-
-            // 将整数传输给子进程:
-            if (write(right_pipe[1], &number, sizeof(int)) < 0) {
-                fprintf(2, "child %d write error\n", getpid());
-                exit(1);
-            }
-        }
-
-        // 父进程关闭管道的写端 (若有):
-        if (has_created_child_process) {
-            close(right_pipe[1]);
-        }
-
-        if (read_status < 0) {
-            fprintf(2, "child %d read error\n", getpid());
-            exit(1);
-        }
-
-        // 等待右边处理完毕:
-        if (has_created_child_process && wait(0) < 0) {
-            fprintf(2, "child %d wait error\n", getpid());
-            exit(1);
-        }
-
-        // printf("child %d exit\n", getpid());
-
-        exit(0);
-    }
-
-    // 父进程:
-    else {
-        // 关闭管道的读端:
-        close(right_pipe[0]);
-
-        int number;
-
-        // 输出所有整数:
-        for (number = 2; number <= 35; number++) {
-            if (write(right_pipe[1], &number, sizeof(int)) < 0) {
-                fprintf(2, "parent write error\n");
-                exit(1);
-            }
-        }
-
-        // 关闭管道的写端:
-        close(right_pipe[1]);
-
-        // 等待右边处理完毕:
-        if (wait(0) < 0) {
-            fprintf(2, "parent wait error\n");
-            exit(1);
-        }
-
-        exit(0);
-    }
-}
-```
+具体代码见文件 [user/primes.c](user/primes.c).
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-### <a id="2.5"></a>find (moderate)
+### <a id="1.5"></a>find (moderate)
 
 实验的目的是为了熟悉文件系统相关的系统调用以及文件路径处理.
 
@@ -399,132 +222,26 @@ struct stat {
 };
 ```
 
-注意事项:
+一些注意事项:
 
-1. 一定要记得排除 `.` 和 `..` 这两个目录, 避免循环遍历.
-1. 对字符串进行操作时务必仔细分析, 稍有不慎就会造成微妙难以察觉的 BUG.
-1. `stat` 和 `fstat` 函数分别用于通过文件名和文件描述符获取文件元数据, 主要用于区分文件是普通文件还是目录文件.
-1. `open` 函数用于打开目录文件并读取条目, 条目的类型为 `dirent`, 其中包含文件名.
+- 务必记得排除 `.` 和 `..` 这两个目录, 避免循环遍历.
+- 对字符串进行操作时务必仔细分析, 稍有不慎就会造成微妙难以察觉的 BUG.
+- `stat` 和 `fstat` 函数分别用于通过文件名和文件描述符获取文件元数据, 主要用于区分文件是普通文件还是目录文件.
+- `open` 函数用于打开目录文件并读取条目, 条目的类型为 `dirent`, 其中包含文件名.
 
-代码:
-
-```c
-#include "kernel/fs.h"
-#include "kernel/stat.h"
-#include "user/user.h"
-
-void find(const char *dir_name, const char *pattern) {
-    // printf("visiting dir: %s\n", dir_name);
-
-    int fd;
-
-    // 打开目录文件:
-    if ((fd = open(dir_name, 0)) < 0) {
-        fprintf(2, "find: cannot open %s\n", dir_name);
-        exit(1);
-    }
-
-    // 为递归传入目录路径做准备:
-    int dir_name_len = strlen(dir_name);
-    char path_buffer[512];
-    memmove(path_buffer, dir_name, dir_name_len);
-    path_buffer[dir_name_len] = '/';
-
-    // 不断读取目录中的条目:
-    struct dirent de;
-    struct stat st;
-    while (read(fd, &de, sizeof(de)) == sizeof(de)) {
-        // printf("checking: %s\n", de.name);
-
-        if (de.inum == 0) {
-            continue;
-        }
-
-        // 跳过这两个特殊情况避免循环遍历:
-        if (strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0) {
-            continue;
-        }
-
-        // 构建完整文件路径:
-        memmove(path_buffer + dir_name_len + 1, de.name, DIRSIZ);
-        path_buffer[dir_name_len + 1 + DIRSIZ] = '\0';
-
-        // 获取文件元数据:
-        if (stat(path_buffer, &st) < 0) {
-            fprintf(2, "find: cannot stat %s\n", path_buffer);
-            exit(1);
-        }
-
-        // 如果是普通文件:
-        if (st.type == T_FILE) {
-            // 当且仅当匹配时打印文件路径:
-            if (strcmp(pattern, de.name) == 0) {
-                printf("%s\n", path_buffer);
-            }
-        }
-
-        // 如果是目录文件:
-        else if (st.type == T_DIR) {
-            // 递归调用:
-            find(path_buffer, pattern);
-        }
-
-        // 其余情况跳过:
-        else {
-            continue;
-        }
-    }
-
-    // 关闭目录文件:
-    close(fd);
-}
-
-int main(int argc, char *argv[]) {
-    // 合理性检查:
-    if (argc != 3) {
-        fprintf(2, "usage: find <dir-path> <file-name-pattern>\n");
-        exit(1);
-    }
-
-    struct stat st;
-
-    // 确认参数 1 是合法的目录路径:
-    if (stat(argv[1], &st) < 0) {
-        fprintf(2, "find: cannot stat %s\n", argv[1]);
-        exit(1);
-    }
-
-    if (st.type != T_DIR) {
-        fprintf(2, "usage: find <dir-path> <file-name-pattern>\n");
-        fprintf(2, "find: please input a valid dir path\n");
-        exit(1);
-    }
-
-    // 确保参数 2 为非空模式:
-    if (strlen(argv[2]) <= 0) {
-        fprintf(2, "usage: find <dir-path> <file-name-pattern>\n");
-        fprintf(2, "find: empty file name pattern\n");
-        exit(1);
-    }
-
-    // 调用 find 函数做真正的搜索:
-    find(argv[1], argv[2]);
-
-    exit(0);
-}
-```
+具体代码见文件 [user/find.c](user/find.c).
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-### <a id="2.6"></a>xargs (moderate)
+### <a id="1.6"></a>xargs (moderate)
 
-要求实现一个简单版本的 `xargs` 程序, 作用是从标准输入读取文本, 将文本内容中的每一行作为一个单独的参数传递给 `xargs` 的参数所指明的程序. 通过 `xargs` 的参数可以为所指明的程序预先指定若干个固定参数, 而从 `xargs` 的标准输入中读取到的单独参数应该追加在这些固定参数之后. 例如
+要求实现一个简单版本的 `xargs` 程序, 作用是从标准输入读取文本, 将文本内容中的每一行作为一个单独的参数传递给 `xargs` 的参数所指明的程序. 通过 `xargs` 的参数可以为所指明的程序预先指定若干个固定参数, 而从 `xargs` 的标准输入中读取到的单独参数应该追加在这些固定参数之后. 例如:
 
 ```bash
 echo "1 2\n3 4" | xargs echo line
 ```
 
-应该输出
+应当输出
 
 ```text
 line 1 2
@@ -537,90 +254,31 @@ line 3 4
 
 一些注意事项:
 
-1. 读取标准输入的时候可以选择带缓冲区地处理, 也可以选择逐字符读取并在遇到换行符的时候切断.
-1. 构建子进程的 argv 的时候可以使用 `kernel/param.h` 中定义的 `MAXARG` 宏指定数组大小.
-1. 一定要注意传递给子进程的可执行文件名位于 `xargs` 的 `argv` 数组的下标为 1 的字符串中, 如果错将下标为 0 的字符串传入给子进程会造成递归调用并产生意想不到的效果.
-1. 在 `exec` 系统调用中, 遍历传入的 `argv` 时一旦遇到空指针则停止, 因此可以将 `argv` 初始化为全 0 来起到和额外传入一个 `arvc` 一样的作用.
+- 读取标准输入的时候可以选择带缓冲区地处理, 也可以选择逐字符读取并在遇到换行符的时候切断.
+- 构建子进程的 argv 的时候可以使用 `kernel/param.h` 中定义的 `MAXARG` 宏指定数组大小.
+- 一定要注意传递给子进程的可执行文件名位于 `xargs` 的 `argv` 数组的下标为 1 的字符串中, 如果错将下标为 0 的字符串传入给子进程会造成递归调用并产生意想不到的效果.
+- 在 `exec` 系统调用中, 遍历传入的 `argv` 时一旦遇到空指针则停止, 因此可以将 `argv` 初始化为全 0 来起到和额外传入一个 `arvc` 一样的作用.
 
-代码:
+具体代码见文件 [user/xargs.c](user/xargs.c).
 
-```c
-#include "kernel/param.h"
-#include "user/user.h"
+<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-#define MAXLINE 512
+## <a id="2"></a>测试与评分相关
 
-int read_line_from_stdin(char *const buffer, const int buffer_size) {
-    char *current_buffer_position = buffer;
-    int read_status;
+运行所有测试:
 
-    // 循环退出当且仅当读取到换行符 `\n`, 或者读取到 EOF, 或者读取出错:
-    while ((read_status = read(0, current_buffer_position, 1)) > 0) {
-        // 如果读取到换行符则需要做截断:
-        if (*current_buffer_position == '\n') {
-            *current_buffer_position = '\0';
-            break;
-        }
+```bash
+make grade
+```
 
-        current_buffer_position++;
-    }
+运行单个测试:
 
-    if (read_status < 0) {
-        fprintf(2, "xargs: read from stdin error\n");
-        exit(1);
-    }
+```bash
+# 方法一:
+./grade-lab-util <function-name>
 
-    // 如果读取到 EOF 同样需要截断:
-    if (read_status == 0) {
-        *current_buffer_position = '\0';
-    }
-
-    // 返回读取到的字符串长度:
-    return current_buffer_position - buffer;
-}
-
-int main(int argc, char *argv[]) {
-    if (argc <= 1) {
-        fprintf(2, "usage: xargs <command> [<argument>...]\n");
-        exit(1);
-    }
-
-    // 合理性检查:
-    if (strcmp(argv[0], "xargs") != 0) {
-        fprintf(2, "surprise motherfucker!\n");
-        exit(1);
-    }
-
-    char *child_argv[MAXARG];
-    int i;
-
-    // 初始化子进程的 argv (在 exec 中是通过空指针 0 来表明数组的结尾的):
-    for (i = 0; i < MAXARG; i++) {
-        child_argv[i] = 0;
-    }
-
-    // xargs 的参数即为子进程的 `argv`:
-    for (i = 1; i < argc; i++) {
-        child_argv[i - 1] = argv[i];
-    }
-
-    // 从 `xargs` 的标准输入中读取的额外参数:
-    char line[MAXLINE];
-    child_argv[i - 1] = line;
-
-    while (read_line_from_stdin(line, MAXLINE) > 0) {
-        // printf("read line: %s\n", line);
-
-        if (fork() == 0) {
-            exec(argv[1], child_argv);
-        }
-        else {
-            wait(0);
-        }
-    }
-
-    exit(0);
-}
+# 方法二:
+make GRADEFLAGS=<function-name> grade
 ```
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
