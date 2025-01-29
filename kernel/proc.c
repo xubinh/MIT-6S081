@@ -259,6 +259,9 @@ int fork(void) {
 
     np->parent = p;
 
+    // for syscall `trace`
+    np->trace_mask = p->trace_mask;
+
     // copy saved user registers.
     *(np->trapframe) = *(p->trapframe);
 
@@ -652,4 +655,8 @@ void procdump(void) {
         printf("%d %s %s", p->pid, state, p->name);
         printf("\n");
     }
+}
+
+void set_trace_mask(int trace_mask) {
+    myproc()->trace_mask = trace_mask;
 }

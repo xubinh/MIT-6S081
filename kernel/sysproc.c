@@ -79,3 +79,17 @@ uint64 sys_uptime(void) {
     release(&tickslock);
     return xticks;
 }
+
+uint64 sys_trace(void) {
+    int trace_mask;
+
+    // I don't know why here needs to check this since the `argint` function
+    // always returns 0, but others are doing it, so do I
+    if (argint(0, &trace_mask) < 0) {
+        return -1;
+    }
+
+    set_trace_mask(trace_mask);
+
+    return 0;
+}
