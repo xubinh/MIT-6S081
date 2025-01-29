@@ -17,13 +17,10 @@
 >   - Lab mmap [TODO]
 >   - Lab network driver [TODO]
 
-本分支的主要内容为实验的一般注意事项.
+本分支主要介绍实验前的一些准备工作, 其中的内容均摘自 (或翻译自) 以下官方网站中的内容:
 
-> [!NOTE]
->
-> - 本分支的内容均摘自 (或翻译自) 以下官方资料:
->   - [工具](https://pdos.csail.mit.edu/6.1810/2020/tools.html)
->   - [实验指南](https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html)
+- <https://pdos.csail.mit.edu/6.1810/2020/tools.html>
+- <https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html>
 
 ## <a id="toc"></a>目录
 
@@ -46,10 +43,6 @@
 
 ## <a id="1"></a>工具
 
-参考资料:
-
-- [6.S081 / Fall 2020](https://pdos.csail.mit.edu/6.1810/2020/tools.html)
-
 ### <a id="1.1"></a>实验所需环境
 
 > QEMU 5.1, GDB 8.3, GCC, and Binutils.
@@ -70,7 +63,7 @@
 
 > [!NOTE]
 >
-> - 上面给出的命令并没有安装 qemu, 因此还需要手动安装一下. 直接执行命令 `sudo apt-get install qemu` 即可.
+> - 上方并没有给出安装 qemu 的命令, 故仍需手动安装. 直接执行命令 `sudo apt-get install qemu` 即可.
 
 ##### <a id="1.2.1.1"></a>qemu-system-misc fix
 
@@ -83,26 +76,27 @@
 > sudo apt-get install qemu-system-misc=1:4.2-3ubuntu6
 > ```
 
-最新版本的 `qemu-system-misc` 包与 xv6 的源码之间可能存在兼容性问题, 需要对 `qemu-system-misc` 包进行手动降级.
+最新版本的 `qemu-system-misc` 包与 xv6 的源码之间存在兼容性问题, 需要对 `qemu-system-misc` 包进行手动降级.
 
 > [!NOTE]
 >
-> - `qemu-system-misc=1:4.2-3ubuntu6` 是旧版本 Ubuntu 的包, 直接尝试安装会提示 "找不到此包", 这是因为软件源中并没有旧版本 Ubuntu 的包仓库. 一个可行的解决方法如下:
->   1. 首先备份软件源 `/etc/apt/sources.list`.
->   1. 向软件源 `/etc/apt/sources.list` 中添加旧版本 Ubuntu 的包仓库.
+> - `qemu-system-misc=1:4.2-3ubuntu6` 为旧版本 Ubuntu 下的包, 直接尝试安装将提示找不到此包, 这是因为软件源中并没有旧版本 Ubuntu 的包仓库. 解决方法如下:
+>   1. 备份软件源 `/etc/apt/sources.list`.
+>   1. 向软件源中添加旧版本 Ubuntu 的包仓库.
 >   1. 执行命令 `sudo apt-get update` 更新数据库.
 >   1. 安装 `qemu-system-misc=1:4.2-3ubuntu6`.
->   1. 复原软件源.
->
->   这种方法的好处是不用自己处理依赖关系, 不过一定要在安装前备份整个系统以防新旧系统的包的依赖关系把系统搞崩了.
+>   1. 恢复软件源.
+> 
+>   完整脚本见 [fix-qemu.sh](fix-qemu.sh).
+> - ⚠️ 执行上述操作之前请务必备份系统.
 
-#### <a id="1.2.2"></a>WSL2 下
+#### <a id="1.2.2"></a>WSL 下
 
 > We haven't tested it, but it might be possible to get everything you need via the Windows Subsystem for Linux or otherwise compiling the tools yourself.
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
-### <a id="1.3"></a>测试环境是否安装成功
+### <a id="1.3"></a>检查安装是否成功
 
 > To test your installation, you should be able to check the following:
 >
@@ -131,7 +125,7 @@
 
 > [!NOTE]
 >
-> - 上面运行的是 `riscv64-unknown-elf-gcc`, 然而在 WSL2 下执行时却报错 "command not found: riscv64-unknown-elf-gcc". 输入 `risc` 并 tab 补全发现是有相应程序的:
+> - 上方所运行的是 `riscv64-unknown-elf-gcc`, 但在 WSL2 下执行时将报错: "command not found: riscv64-unknown-elf-gcc". 输入 `risc` + tab 得到如下补全内容:
 >
 >   ```text
 >   $ riscv64-linux-gnu-                                                            
@@ -148,15 +142,15 @@
 >   riscv64-linux-gnu-gcc-ar-11      riscv64-linux-gnu-gprof          riscv64-linux-gnu-strip
 >   ```
 > 
->   根据上述结果来看应该执行 `riscv64-linux-gnu-gcc`.
+>   可以看出所要执行的版本应为 `riscv64-linux-gnu-gcc`.
 
 <div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
 
+### 参考资料
+
+- <https://pdos.csail.mit.edu/6.1810/2020/tools.html>
+
 ## <a id="2"></a>实验指南
-
-参考资料:
-
-- [Lab guidance](https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html)
 
 ### <a id="2.1"></a>关于实验的难易程度
 
@@ -171,3 +165,7 @@
 - 当内核报错 (报错时会执行 `panic` 函数) 的时候它会输出报错时的 PC 值, 可以利用这一 PC 值通过命令 `addr2line -e kernel/kernel <pc-value>` 或者直接在 `kernel.asm` 中定位报错的函数. 如果想要获取 backtrace 信息可以通过 gdb 在 `panic` 函数上设置端点并在报错之后执行 `bt` 来获取.
 - 如果内核在运行过程中卡住, 可以通过像前面所说的方式双开窗口进行调试, 并在内核挂起的时候在 `qemu-gdb` 窗口中发送 Ctrl+C 并执行 `bt` 来获取 backtrace 信息.
 - qemu 中也包含一个 "monitor" 能够查询所模拟的机器的状态, 可以通过 Ctrl+A C 来进入 monitor. 一条特别有用的 monitor 命令是 `info mem`, 其作用是打印页表. 使用这条命令之前可能需要先使用 `cpu` 命令选择想要查看的 CPU 核心, 或者也可以从一开始直接用 `make CPUS=1 qemu` 以限制 qemu 仅使用单个核心.
+
+### 参考资料
+
+- <https://pdos.csail.mit.edu/6.1810/2020/labs/guidance.html>
