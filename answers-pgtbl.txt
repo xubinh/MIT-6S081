@@ -1,0 +1,11 @@
+Q: Explain why the third test srcva + len < srcva is necessary in copyin_new(): give values for srcva and len for which the first two test fail (i.e., they will not cause to return -1) but for which the third one is true (resulting in returning -1).
+
+A: It's because both `srcva` and `len` are of type `uint64`, when `srcva` is fixed an arbitrary value of `len` could make the sum overflow and (due to unsigned property) will start over from zero, which means the sum might become smaller than either of the operand.
+
+Example:
+
+- `srcva`   := 0x1
+- `len`     := 0x1111111111111111
+- `p->sz`   := 0x2
+
+Then it's easy to see that (1) `srcva < p->sz`, (2) `srcva + len < p->sz`, but (3) `srcva + len < srcva`.

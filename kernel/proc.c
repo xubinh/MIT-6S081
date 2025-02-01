@@ -44,11 +44,13 @@ void procinit(void) {
 
 static void procinit_per_process(pagetable_t kernel_pagetable) {
     struct proc *p;
-    
+
     for (p = proc; p < &proc[NPROC]; p++) {
         uint64 va = KSTACK((int)(p - proc));
         uint64 pa = kvmpa(va);
-        kvmmap_per_process(kernel_pagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+        kvmmap_per_process(
+            kernel_pagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W
+        );
     }
 }
 
@@ -229,7 +231,10 @@ void userinit(void) {
     // and data into it.
     uvminit(p->pagetable, initcode, sizeof(initcode));
     p->sz = PGSIZE;
-    sync_user_pagetable_to_kernel_pagetable(p->pagetable, p->kernel_pagetable, 0, p->sz);
+    // printf("[xbhuang] init\n");
+    sync_user_pagetable_to_kernel_pagetable(
+        p->pagetable, p->kernel_pagetable, 0, p->sz
+    );
 
     // prepare for the very first "return" from kernel to user.
     p->trapframe->epc = 0;     // user program counter
@@ -249,9 +254,11 @@ int growproc(int n) {
     uint sz;
     struct proc *p = myproc();
 
+    // printf("[xbhuang] sbrk: %s\n", p->name);
+
     sz = p->sz;
     if (n > 0) {
-        if(sz + n >= PLIC) {
+        if (sz + n < 0 || sz + n >= PLIC) {
             return -1;
         }
 
@@ -259,12 +266,16 @@ int growproc(int n) {
             return -1;
         }
 
-        sync_user_pagetable_to_kernel_pagetable(p->pagetable, p->kernel_pagetable, p->sz, sz);
+        sync_user_pagetable_to_kernel_pagetable(
+            p->pagetable, p->kernel_pagetable, p->sz, sz
+        );
     }
     else if (n < 0) {
         sz = uvmdealloc(p->pagetable, sz, sz + n);
 
-        sync_user_pagetable_to_kernel_pagetable(p->pagetable, p->kernel_pagetable, p->sz, sz);
+        sync_user_pagetable_to_kernel_pagetable(
+            p->pagetable, p->kernel_pagetable, p->sz, sz
+        );
     }
     p->sz = sz;
     return 0;
@@ -289,7 +300,10 @@ int fork(void) {
         return -1;
     }
     np->sz = p->sz;
-    sync_user_pagetable_to_kernel_pagetable(np->pagetable, np->kernel_pagetable, 0, np->sz);
+    // printf("[xbhuang] fork: %s\n", p->name);
+    sync_user_pagetable_to_kernel_pagetable(
+        np->pagetable, np->kernel_pagetable, 0, np->sz
+    );
 
     np->parent = p;
 
@@ -491,7 +505,8 @@ void scheduler(void) {
                 // `usertrapret`
                 // printf("pid: %d\n", p->pid);
                 // vmprint(p->pagetable);
-                // printf("kernel_pagetable: %p\n", (uint64)p->kernel_pagetable);
+                // printf("kernel_pagetable: %p\n",
+                // (uint64)p->kernel_pagetable);
                 w_satp(MAKE_SATP(p->kernel_pagetable));
                 sfence_vma();
 

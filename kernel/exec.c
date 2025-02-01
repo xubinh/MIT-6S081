@@ -107,7 +107,7 @@ int exec(char *path, char **argv) {
             last = s + 1;
     safestrcpy(p->name, last, sizeof(p->name));
 
-    if(sz >= PLIC) {
+    if (sz >= PLIC) {
         goto bad;
     }
 
@@ -119,10 +119,50 @@ int exec(char *path, char **argv) {
     p->trapframe->epc = elf.entry; // initial program counter = main
     p->trapframe->sp = sp;         // initial stack pointer
     proc_freepagetable(oldpagetable, oldsz);
-    sync_user_pagetable_to_kernel_pagetable(oldpagetable, p->kernel_pagetable, old_sz, 0);
-    sync_user_pagetable_to_kernel_pagetable(p->pagetable, p->kernel_pagetable, 0, p->sz);
+    // printf("[xbhuang] exec: %s\n", p->name);
+    if (sync_user_pagetable_to_kernel_pagetable(
+            oldpagetable, p->kernel_pagetable, old_sz, 0
+        )
+        == -1) {
 
-    if(p->pid==1) {
+        panic("exec: shrinking memory should not cause any error");
+    }
+
+    // no new kernel pagetable page will be allocated; everything should be OK
+    if (old_sz >= p->sz) {
+        if (sync_user_pagetable_to_kernel_pagetable(
+                p->pagetable, p->kernel_pagetable, 0, p->sz
+            )
+            == -1) {
+
+            panic("exec: shrinking memory should not cause any error");
+        }
+    }
+
+    // new kernel pagetable pages might be allocated; must preserve the original
+    // process's state if out of memory
+    else {
+        // deal with the part that requires new kernel pagetable pages first
+        if (sync_user_pagetable_to_kernel_pagetable(
+                p->pagetable, p->kernel_pagetable, old_sz, p->sz
+            )
+            == -1) {
+
+            goto bad;
+        }
+
+        // no new kernel pagetable page will be allocated; everything should be
+        // OK
+        if (sync_user_pagetable_to_kernel_pagetable(
+                p->pagetable, p->kernel_pagetable, 0, old_sz
+            )
+            == -1) {
+
+            panic("exec: shrinking memory should not cause any error");
+        }
+    }
+
+    if (p->pid == 1) {
         vmprint(p->pagetable);
     }
 

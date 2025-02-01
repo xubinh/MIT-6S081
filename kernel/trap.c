@@ -25,6 +25,8 @@ void trapinithart(void) {
     w_stvec((uint64)kernelvec);
 }
 
+// extern pagetable_t kernel_pagetable;
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -73,8 +75,14 @@ void usertrap(void) {
         exit(-1);
 
     // give up the CPU if this is a timer interrupt.
-    if (which_dev == 2)
+    if (which_dev == 2){
+        // printf("[xbhuang] timer interrupt\n");
+        // printf("[xbhuang] p->pagetable: %p\n", p->pagetable);
+        // printf("[xbhuang] p->kernel_pagetable: %p\n", p->kernel_pagetable);
+        // printf("[xbhuang] kernel_pagetable: %p\n", kernel_pagetable);
+        // printf("[xbhuang] satp: %p\n", r_satp());
         yield();
+    }
 
     usertrapret();
 }

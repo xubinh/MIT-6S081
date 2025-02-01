@@ -29,7 +29,7 @@ void kvminit() {
     kvmmap(VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
 
     // CLINT
-    kvmmap(CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+    // kvmmap(CLINT, CLINT, 0x10000, PTE_R | PTE_W);
 
     // PLIC
     kvmmap(PLIC, PLIC, 0x400000, PTE_R | PTE_W);
@@ -67,7 +67,7 @@ pagetable_t kvminit_per_process() {
     );
 
     // CLINT
-    kvmmap_per_process(kernel_pagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+    // kvmmap_per_process(kernel_pagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
 
     // PLIC
     kvmmap_per_process(kernel_pagetable, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
@@ -564,7 +564,7 @@ vmprint_walk_kernel(pagetable_t current_pagetable_page, int current_level) {
         );
 
         if (current_level >= 2) {
-            if(!vmprint_walk_kernel((pagetable_t)pa, current_level - 1)) {
+            if (!vmprint_walk_kernel((pagetable_t)pa, current_level - 1)) {
                 return 0;
             }
         }
@@ -580,7 +580,10 @@ void vmprint_kernel(pagetable_t kernel_pagetable) {
     vmprint_walk_kernel(kernel_pagetable, 3);
 }
 
-void sync_user_pagetable_to_kernel_pagetable(
+// allocates pages for kernel page table but never free them;
+// undo everything whenever out of memory;
+// returns 0 if OK, otherwise returns -1
+int sync_user_pagetable_to_kernel_pagetable(
     pagetable_t user_pagetable,
     pagetable_t kernel_pagetable,
     uint64 old_size,
@@ -590,7 +593,8 @@ void sync_user_pagetable_to_kernel_pagetable(
     new_size = PGROUNDUP(new_size);
 
     if (old_size < new_size) {
-        printf("expand, old size: %d, new size: %d\n", old_size, new_size);
+        // printf("[xbhuang] expand, old size: %d, new size: %d\n", old_size,
+        // new_size);
 
         uint64 va = old_size;
 
@@ -598,16 +602,23 @@ void sync_user_pagetable_to_kernel_pagetable(
             pte_t *pte_ptr = walk(user_pagetable, va, 0);
 
             if (pte_ptr == 0) {
-                panic("sync_user_pagetable_to_kernel_pagetable: inconsistent "
-                      "user pagetable changes");
+                // the user think there is a page but we found nothing
+                return -1;
             }
 
             uint64 pa = PTE2PA(*pte_ptr);
 
+            // user pages should never be executable
             if (mappages(kernel_pagetable, va, PGSIZE, pa, PTE_R | PTE_W)
-            // if (mappages(kernel_pagetable, va, PGSIZE, pa, PTE_W | PTE_R | PTE_X | PTE_U)
                 == -1) {
-                panic("sync_user_pagetable_to_kernel_pagetable: out of memory");
+                // out of memory
+
+                // undo all the previous mappings
+                uvmunmap(
+                    kernel_pagetable, old_size, (va - old_size) / PGSIZE, 0
+                );
+
+                return -1;
             }
 
             va += PGSIZE;
@@ -615,10 +626,16 @@ void sync_user_pagetable_to_kernel_pagetable(
     }
 
     else if (old_size > new_size) {
-        printf("shrink, old size: %d, new size: %d\n", old_size, new_size);
+        // printf(
+        //     "[xbhuang] shrink, old size: %d, new size: %d\n", old_size,
+        //     new_size
+        // );
 
         uvmunmap(kernel_pagetable, new_size, (old_size - new_size) / PGSIZE, 0);
     }
 
+    // for debugging
     // vmprint_kernel(kernel_pagetable);
+
+    return 0;
 }
