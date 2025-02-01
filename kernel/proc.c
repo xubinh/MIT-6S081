@@ -42,6 +42,16 @@ void procinit(void) {
     kvminithart();
 }
 
+static void procinit_per_process(pagetable_t kernel_pagetable) {
+    struct proc *p;
+    
+    for (p = proc; p < &proc[NPROC]; p++) {
+        uint64 va = KSTACK((int)(p - proc));
+        uint64 pa = kvmpa(va);
+        kvmmap_per_process(kernel_pagetable, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
+    }
+}
+
 // Must be called with interrupts disabled,
 // to prevent race with process being moved
 // to a different CPU.
@@ -105,6 +115,16 @@ found:
         return 0;
     }
 
+    p->kernel_pagetable = kvminit_per_process();
+
+    if (p->kernel_pagetable == 0) {
+        freeproc(p);
+        release(&p->lock);
+        return 0;
+    }
+
+    procinit_per_process(p->kernel_pagetable);
+
     // An empty user page table.
     p->pagetable = proc_pagetable(p);
     if (p->pagetable == 0) {
@@ -129,6 +149,10 @@ static void freeproc(struct proc *p) {
     if (p->trapframe)
         kfree((void *)p->trapframe);
     p->trapframe = 0;
+    if (p->kernel_pagetable) {
+        kvmunmap_per_process(p->kernel_pagetable);
+    }
+    p->kernel_pagetable = 0;
     if (p->pagetable)
         proc_freepagetable(p->pagetable, p->sz);
     p->pagetable = 0;
@@ -452,7 +476,19 @@ void scheduler(void) {
                 // before jumping back to us.
                 p->state = RUNNING;
                 c->proc = p;
+
+                // switch to process's kernel page table before going into
+                // `usertrapret`
+                // printf("pid: %d\n", p->pid);
+                // vmprint(p->pagetable);
+                // printf("kernel_pagetable: %p\n", (uint64)p->kernel_pagetable);
+                w_satp(MAKE_SATP(p->kernel_pagetable));
+                sfence_vma();
+
                 swtch(&c->context, &p->context);
+
+                // switch back to global kernel page table
+                kvminithart();
 
                 // Process is done running for now.
                 // It should have changed its p->state before coming back.
@@ -522,6 +558,8 @@ void forkret(void) {
         first = 0;
         fsinit(ROOTDEV);
     }
+
+    // printf("pid: %d\n", myproc()->pid);
 
     usertrapret();
 }
