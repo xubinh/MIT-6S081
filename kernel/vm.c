@@ -432,70 +432,78 @@ int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) {
     return 0;
 }
 
+int copyin_new(pagetable_t, char *, uint64, uint64);
+
 // Copy from user to kernel.
 // Copy len bytes to dst from virtual address srcva in a given page table.
 // Return 0 on success, -1 on error.
 int copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len) {
-    uint64 n, va0, pa0;
+    // uint64 n, va0, pa0;
 
-    while (len > 0) {
-        va0 = PGROUNDDOWN(srcva);
-        pa0 = walkaddr(pagetable, va0);
-        if (pa0 == 0)
-            return -1;
-        n = PGSIZE - (srcva - va0);
-        if (n > len)
-            n = len;
-        memmove(dst, (void *)(pa0 + (srcva - va0)), n);
+    // while (len > 0) {
+    //     va0 = PGROUNDDOWN(srcva);
+    //     pa0 = walkaddr(pagetable, va0);
+    //     if (pa0 == 0)
+    //         return -1;
+    //     n = PGSIZE - (srcva - va0);
+    //     if (n > len)
+    //         n = len;
+    //     memmove(dst, (void *)(pa0 + (srcva - va0)), n);
 
-        len -= n;
-        dst += n;
-        srcva = va0 + PGSIZE;
-    }
-    return 0;
+    //     len -= n;
+    //     dst += n;
+    //     srcva = va0 + PGSIZE;
+    // }
+    // return 0;
+
+    return copyin_new(pagetable, dst, srcva, len);
 }
+
+int copyinstr_new(pagetable_t, char *, uint64, uint64);
 
 // Copy a null-terminated string from user to kernel.
 // Copy bytes to dst from virtual address srcva in a given page table,
 // until a '\0', or max.
 // Return 0 on success, -1 on error.
 int copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max) {
-    uint64 n, va0, pa0;
-    int got_null = 0;
+    // uint64 n, va0, pa0;
+    // int got_null = 0;
 
-    while (got_null == 0 && max > 0) {
-        va0 = PGROUNDDOWN(srcva);
-        pa0 = walkaddr(pagetable, va0);
-        if (pa0 == 0)
-            return -1;
-        n = PGSIZE - (srcva - va0);
-        if (n > max)
-            n = max;
+    // while (got_null == 0 && max > 0) {
+    //     va0 = PGROUNDDOWN(srcva);
+    //     pa0 = walkaddr(pagetable, va0);
+    //     if (pa0 == 0)
+    //         return -1;
+    //     n = PGSIZE - (srcva - va0);
+    //     if (n > max)
+    //         n = max;
 
-        char *p = (char *)(pa0 + (srcva - va0));
-        while (n > 0) {
-            if (*p == '\0') {
-                *dst = '\0';
-                got_null = 1;
-                break;
-            }
-            else {
-                *dst = *p;
-            }
-            --n;
-            --max;
-            p++;
-            dst++;
-        }
+    //     char *p = (char *)(pa0 + (srcva - va0));
+    //     while (n > 0) {
+    //         if (*p == '\0') {
+    //             *dst = '\0';
+    //             got_null = 1;
+    //             break;
+    //         }
+    //         else {
+    //             *dst = *p;
+    //         }
+    //         --n;
+    //         --max;
+    //         p++;
+    //         dst++;
+    //     }
 
-        srcva = va0 + PGSIZE;
-    }
-    if (got_null) {
-        return 0;
-    }
-    else {
-        return -1;
-    }
+    //     srcva = va0 + PGSIZE;
+    // }
+    // if (got_null) {
+    //     return 0;
+    // }
+    // else {
+    //     return -1;
+    // }
+
+    return copyinstr_new(pagetable, dst, srcva, max);
 }
 
 static char *leading_dots[4] = {
@@ -534,4 +542,83 @@ void vmprint(pagetable_t pagetable) {
     printf("page table %p\n", (uint64)pagetable);
 
     vmprint_walk(pagetable, 3);
+}
+
+static int
+vmprint_walk_kernel(pagetable_t current_pagetable_page, int current_level) {
+    for (int i = 0; i < 512; i++) {
+        pte_t pte = current_pagetable_page[i];
+
+        if (!(pte & PTE_V)) {
+            return 0;
+        }
+
+        uint64 pa = PTE2PA(pte);
+
+        printf(
+            "%s%d: pte %p pa %p\n",
+            leading_dots[current_level],
+            i,
+            (uint64)pte,
+            pa
+        );
+
+        if (current_level >= 2) {
+            if(!vmprint_walk_kernel((pagetable_t)pa, current_level - 1)) {
+                return 0;
+            }
+        }
+    }
+
+    return 1;
+}
+
+// for debug only
+void vmprint_kernel(pagetable_t kernel_pagetable) {
+    printf("kernel page table %p\n", (uint64)kernel_pagetable);
+
+    vmprint_walk_kernel(kernel_pagetable, 3);
+}
+
+void sync_user_pagetable_to_kernel_pagetable(
+    pagetable_t user_pagetable,
+    pagetable_t kernel_pagetable,
+    uint64 old_size,
+    uint64 new_size
+) {
+    old_size = PGROUNDUP(old_size);
+    new_size = PGROUNDUP(new_size);
+
+    if (old_size < new_size) {
+        printf("expand, old size: %d, new size: %d\n", old_size, new_size);
+
+        uint64 va = old_size;
+
+        while (va < new_size) {
+            pte_t *pte_ptr = walk(user_pagetable, va, 0);
+
+            if (pte_ptr == 0) {
+                panic("sync_user_pagetable_to_kernel_pagetable: inconsistent "
+                      "user pagetable changes");
+            }
+
+            uint64 pa = PTE2PA(*pte_ptr);
+
+            if (mappages(kernel_pagetable, va, PGSIZE, pa, PTE_R | PTE_W)
+            // if (mappages(kernel_pagetable, va, PGSIZE, pa, PTE_W | PTE_R | PTE_X | PTE_U)
+                == -1) {
+                panic("sync_user_pagetable_to_kernel_pagetable: out of memory");
+            }
+
+            va += PGSIZE;
+        }
+    }
+
+    else if (old_size > new_size) {
+        printf("shrink, old size: %d, new size: %d\n", old_size, new_size);
+
+        uvmunmap(kernel_pagetable, new_size, (old_size - new_size) / PGSIZE, 0);
+    }
+
+    // vmprint_kernel(kernel_pagetable);
 }

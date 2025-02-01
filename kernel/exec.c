@@ -13,7 +13,7 @@ loadseg(pde_t *pgdir, uint64 addr, struct inode *ip, uint offset, uint sz);
 int exec(char *path, char **argv) {
     char *s, *last;
     int i, off;
-    uint64 argc, sz = 0, sp, ustack[MAXARG + 1], stackbase;
+    uint64 argc, sz = 0, old_sz, sp, ustack[MAXARG + 1], stackbase;
     struct elfhdr elf;
     struct inode *ip;
     struct proghdr ph;
@@ -107,13 +107,20 @@ int exec(char *path, char **argv) {
             last = s + 1;
     safestrcpy(p->name, last, sizeof(p->name));
 
+    if(sz >= PLIC) {
+        goto bad;
+    }
+
     // Commit to the user image.
     oldpagetable = p->pagetable;
     p->pagetable = pagetable;
+    old_sz = p->sz;
     p->sz = sz;
     p->trapframe->epc = elf.entry; // initial program counter = main
     p->trapframe->sp = sp;         // initial stack pointer
     proc_freepagetable(oldpagetable, oldsz);
+    sync_user_pagetable_to_kernel_pagetable(oldpagetable, p->kernel_pagetable, old_sz, 0);
+    sync_user_pagetable_to_kernel_pagetable(p->pagetable, p->kernel_pagetable, 0, p->sz);
 
     if(p->pid==1) {
         vmprint(p->pagetable);
