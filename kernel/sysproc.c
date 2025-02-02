@@ -81,3 +81,44 @@ uint64 sys_uptime(void) {
     release(&tickslock);
     return xticks;
 }
+
+uint64 sys_sigalarm(void) {
+    struct proc *p = myproc();
+    int total_number_of_ticks_for_timer_handler;
+    void (*timer_handler)();
+    
+    if (argint(0, &total_number_of_ticks_for_timer_handler) < 0){
+        return -1;
+    }
+
+    if(total_number_of_ticks_for_timer_handler < 0) {
+        return -1;
+    }
+    
+    if (argaddr(1, (uint64 *)&timer_handler) < 0){
+        return -1;
+    }
+
+    if(p->trapframe_backup == 0) {
+        p->trapframe_backup = (struct trapframe *)kalloc();
+
+        if(p->trapframe_backup == 0) {
+            return -1;
+        }
+    }
+
+    p->total_number_of_ticks_for_timer_handler = total_number_of_ticks_for_timer_handler;
+    p->current_number_of_ticks_for_timer_handler_left = total_number_of_ticks_for_timer_handler;
+    p->timer_handler = timer_handler;
+
+    return 0;
+}
+
+uint64 sys_sigreturn(void) {
+    struct proc *p = myproc();
+
+    p->current_number_of_ticks_for_timer_handler_left = p->total_number_of_ticks_for_timer_handler;
+    *p->trapframe = *p->trapframe_backup;
+
+    return 0;
+}

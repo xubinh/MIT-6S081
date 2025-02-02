@@ -119,6 +119,11 @@ found:
     p->context.ra = (uint64)forkret;
     p->context.sp = p->kstack + PGSIZE;
 
+    p->total_number_of_ticks_for_timer_handler = 0;
+    p->current_number_of_ticks_for_timer_handler_left = 0;
+    p->timer_handler = 0;
+    p->trapframe_backup = 0;
+
     return p;
 }
 
@@ -126,6 +131,13 @@ found:
 // including user pages.
 // p->lock must be held.
 static void freeproc(struct proc *p) {
+    if(p->trapframe_backup){
+        kfree((void *)p->trapframe_backup);
+        p->trapframe_backup = 0;
+    }
+    p->total_number_of_ticks_for_timer_handler = 0;
+    p->current_number_of_ticks_for_timer_handler_left = 0;
+    p->timer_handler = 0;
     if (p->trapframe)
         kfree((void *)p->trapframe);
     p->trapframe = 0;
