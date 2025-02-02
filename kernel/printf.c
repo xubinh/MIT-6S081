@@ -114,6 +114,7 @@ void panic(char *s) {
     printf(s);
     printf("\n");
     panicked = 1; // freeze uart output from other CPUs
+    backtrace();
     for (;;)
         ;
 }
@@ -121,4 +122,29 @@ void panic(char *s) {
 void printfinit(void) {
     initlock(&pr.lock, "pr");
     pr.locking = 1;
+}
+
+static int check_if_s0_is_within_the_page(uint64 page_begin_pa_aligned, uint64 page_end_pa_aligned, uint64 s0) {
+    return s0 < page_begin_pa_aligned + 2 ? 0 : (
+        s0 < page_end_pa_aligned ? 1 : 0
+    );
+}
+
+void backtrace(void) {
+    uint64 current_s0 = r_fp();
+    uint64 previous_s0;
+    uint64 ra;
+    uint64 page_begin_pa_aligned = PGROUNDDOWN(current_s0 - 1);
+    uint64 page_end_pa_aligned = page_begin_pa_aligned + PGSIZE;
+
+    printf("backtrace:\n");
+
+    while(check_if_s0_is_within_the_page(page_begin_pa_aligned, page_end_pa_aligned, current_s0)) {
+        previous_s0 = *(uint64 *)(current_s0 - 16);
+        ra = *(uint64 *)(current_s0 - 8);
+
+        printf("%p\n", ra);
+
+        current_s0 = previous_s0;
+    }
 }
