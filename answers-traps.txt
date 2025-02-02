@@ -1,0 +1,60 @@
+# answers-traps
+
+Q1: Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
+
+A:
+
+- `a0` for the first argument, `a1` for the second, etc. And for the printf function, the register `a2` is holding the value `13` since it is the third argument of that call.
+
+---
+
+Q2: Where is the call to function f in the assembly code for main? Where is the call to g? (Hint: the compiler may inline functions.)
+
+A:
+
+- the call to `f` in `main` is optimized out by the compiler with an immediate value, i.e. `12 = (8 + 3) + 1`.
+- the call to `g` in `f` is also optimized out (inlined) by the compiler to avoid unnecessary function calls.
+
+---
+
+Q3: At what address is the function printf located?
+
+A:
+
+- `0x628 = 0x30 + 0x5f8`, since `auipc` loads the current PC, which is the address of `auipc` (i.e. `0x30`), into `ra`, and `jalr` adds ahother 1528 (i.e. `0x5f8`) into it and make it the new value of PC.
+
+---
+
+Q4: What value is in the register ra just after the jalr to printf in main?
+
+A:
+
+- `0x38 = 0x34 + 0x4`, since `jalr` will load the current value of PC (i.e. `0x34`, the address of `jalr`) and add another 4 bytes (which is the length of `jalr` instruction itself) to it and then make it the new value of `ra`.
+
+---
+
+Q5: Run the following code.
+
+```c
+unsigned int i = 0x00646c72;
+printf("H%x Wo%s", 57616, &i);
+```
+
+What is the output? If the RISC-V were instead big-endian what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
+
+A:
+
+- The output will be `HE110 World`. Since RISC-V is little-endian, the bytes of `0x00646c72` reordered by little-endian is `72, 6c, 64, 00`, which is then translated into `r, l, d, \0`, according to the ascii table. As for `57616`, making it hex gives `E110`, so the final result will be `HE110 World`.
+- If RISC-V was big-endian, then the order of bytes inside `0x00646c72` should be reverted, which gives `0x726c6400`. But for `57616` it should remain the same since the representation of it is only relied on its actual value, not the byte-order of it.
+
+---
+
+Q6: In the following code, what is going to be printed after 'y='? (note: the answer is not a specific value.) Why does this happen?
+
+```c
+printf("x=%d y=%d", 3);
+```
+
+A:
+
+- The thing that will be printed after `y=` will be whatever that is stored after the second argument `3` in the stack. This is because in the compiled code of `printf` the registers `a1`-`a7` will first be stored starting at `8(s0)`, and then pass this address as the argument to `vprintf` (i.e. `addi a2,s0,8`, where `a2` stands for the third argument of `vprintf`, `ap`). When ever `vprintf` reads a value, it immediately increments `ap` to the address of the next data. In the case where an extra token `%d` is given without a corresponding data, whatever that is after the last valid data will be fetched, that is, in this case, the value of `a2` that got passed to `printf`.
