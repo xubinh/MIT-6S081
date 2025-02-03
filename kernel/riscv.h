@@ -275,3 +275,21 @@ static inline void sfence_vma() {
 
 typedef uint64 pte_t;
 typedef uint64 *pagetable_t; // 512 PTEs
+
+#define PTE_RSW (3L << 8)
+
+#define RESERVED (2L << 8)
+
+static inline int check_cow(pte_t *pte_ptr) {
+    return (((*pte_ptr) & PTE_RSW) == RESERVED) && !((*pte_ptr) & PTE_W);
+}
+
+static inline void set_cow(pte_t *pte_ptr) {
+    (*pte_ptr) |= RESERVED;
+    (*pte_ptr) &= ~PTE_W;
+}
+
+static inline void reset_cow(pte_t *pte_ptr) {
+    (*pte_ptr) &= ~RESERVED;
+    (*pte_ptr) |= PTE_W;
+}

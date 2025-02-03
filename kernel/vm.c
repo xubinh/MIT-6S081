@@ -286,31 +286,49 @@ void uvmfree(pagetable_t pagetable, uint64 sz) {
 // physical memory.
 // returns 0 on success, -1 on failure.
 // frees any allocated pages on failure.
-int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
-    pte_t *pte;
-    uint64 pa, i;
+int uvmcopy(
+    pagetable_t parent_pagetable, pagetable_t child_pagetable, uint64 sz
+) {
+    pte_t *pte_ptr;
+    uint64 current_page_pa;
+    uint64 current_page_va;
     uint flags;
-    char *mem;
 
-    for (i = 0; i < sz; i += PGSIZE) {
-        if ((pte = walk(old, i, 0)) == 0)
+    for (current_page_va = 0; current_page_va < sz; current_page_va += PGSIZE) {
+        if ((pte_ptr = walk(parent_pagetable, current_page_va, 0)) == 0) {
             panic("uvmcopy: pte should exist");
-        if ((*pte & PTE_V) == 0)
+        }
+
+        if ((*pte_ptr & PTE_V) == 0) {
             panic("uvmcopy: page not present");
-        pa = PTE2PA(*pte);
-        flags = PTE_FLAGS(*pte);
-        if ((mem = kalloc()) == 0)
-            goto err;
-        memmove(mem, (char *)pa, PGSIZE);
-        if (mappages(new, i, PGSIZE, (uint64)mem, flags) != 0) {
-            kfree(mem);
+        }
+
+        current_page_pa = PTE2PA(*pte_ptr);
+
+        atomic_increment_cow_page_reference_count(current_page_pa);
+
+        set_cow(pte_ptr);
+
+        flags = PTE_FLAGS(*pte_ptr);
+
+        if (mappages(
+                child_pagetable, current_page_va, PGSIZE, current_page_pa, flags
+            )
+            != 0) {
+
+            reset_cow(pte_ptr);
+
+            atomic_decrement_cow_page_reference_count(current_page_pa);
+
             goto err;
         }
     }
+
     return 0;
 
 err:
-    uvmunmap(new, 0, i / PGSIZE, 1);
+    uvmunmap(child_pagetable, 0, current_page_va / PGSIZE, 1);
+
     return -1;
 }
 
@@ -333,18 +351,52 @@ int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) {
 
     while (len > 0) {
         va0 = PGROUNDDOWN(dstva);
-        pa0 = walkaddr(pagetable, va0);
-        if (pa0 == 0)
+
+        if (va0 >= MAXVA) {
             return -1;
+        }
+
+        pte_t *pte_ptr = walk(pagetable, va0, 0);
+
+        if (pte_ptr == 0 || (*pte_ptr & PTE_V) == 0 || (*pte_ptr & PTE_U) == 0
+            || (pa0 = PTE2PA(*pte_ptr)) == 0) {
+
+            return -1;
+        }
+
+        if (check_cow(pte_ptr)) {
+            uint64 new_page_pa;
+
+            if (atomic_copy_and_decrement_cow_page_reference_count(
+                    pa0, &new_page_pa
+                )
+                == -1) {
+
+                return -1;
+            }
+
+            else {
+                *pte_ptr = PA2PTE(new_page_pa) | PTE_FLAGS(*pte_ptr);
+
+                reset_cow(pte_ptr);
+
+                pa0 = new_page_pa;
+            }
+        }
+
         n = PGSIZE - (dstva - va0);
-        if (n > len)
+
+        if (n > len) {
             n = len;
+        }
+
         memmove((void *)(pa0 + (dstva - va0)), src, n);
 
         len -= n;
         src += n;
         dstva = va0 + PGSIZE;
     }
+
     return 0;
 }
 

@@ -63,6 +63,10 @@ void ramdiskrw(struct buf *);
 void *kalloc(void);
 void kfree(void *);
 void kinit(void);
+int atomic_fetch_cow_page_reference_count(uint64);
+int atomic_increment_cow_page_reference_count(uint64);
+int atomic_decrement_cow_page_reference_count(uint64);
+int atomic_copy_and_decrement_cow_page_reference_count(uint64, uint64 *);
 
 // log.c
 void initlog(int, struct superblock *);

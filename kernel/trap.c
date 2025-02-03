@@ -25,6 +25,8 @@ void trapinithart(void) {
     w_stvec((uint64)kernelvec);
 }
 
+pte_t *walk(pagetable_t, uint64, int);
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -60,9 +62,46 @@ void usertrap(void) {
 
         syscall();
     }
+
+    else if (r_scause() == 15) {
+        uint64 requested_va = r_stval();
+
+        if (requested_va >= p->sz) {
+            p->killed = 1;
+
+            exit(-1);
+        }
+
+        pte_t *pte_ptr = walk(p->pagetable, requested_va, 0);
+
+        if (pte_ptr == 0 || !check_cow(pte_ptr)) {
+            panic(
+                "usertrap: write page fault triggered by invalid memory access"
+            );
+        }
+
+        uint64 new_page_pa;
+
+        // out of memory
+        if (atomic_copy_and_decrement_cow_page_reference_count(
+                PTE2PA(*pte_ptr), &new_page_pa
+            )
+            == -1) {
+
+            p->killed = 1;
+
+            exit(-1);
+        }
+
+        *pte_ptr = PA2PTE(new_page_pa) | PTE_FLAGS(*pte_ptr);
+
+        reset_cow(pte_ptr);
+    }
+
     else if ((which_dev = devintr()) != 0) {
         // ok
     }
+
     else {
         printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
         printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
