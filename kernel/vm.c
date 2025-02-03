@@ -85,6 +85,37 @@ pte_t *walk(pagetable_t pagetable, uint64 va, int alloc) {
     return &pagetable[PX(0, va)];
 }
 
+// returns 0 if OK; otherwise returns -1
+int allocate_and_map_one_page_in_user_pagetable(
+    pagetable_t user_pagetable, uint64 request_va
+) {
+    uint64 request_page = (uint64)kalloc();
+
+    if (request_page == 0) {
+        return -1;
+    }
+
+    memset((void *)request_page, 0, PGSIZE);
+
+    uint64 aligned_request_va = PGROUNDDOWN(request_va);
+
+    if (mappages(
+            user_pagetable,
+            aligned_request_va,
+            PGSIZE,
+            request_page,
+            PTE_W | PTE_X | PTE_R | PTE_U
+        )
+        != 0) {
+
+        kfree((void *)request_page);
+
+        return -1;
+    }
+
+    return 0;
+}
+
 // Look up a virtual address, return the physical address,
 // or 0 if not mapped.
 // Can only be used to look up user pages.
@@ -159,7 +190,7 @@ int mappages(
 }
 
 // Remove npages of mappings starting from va. va must be
-// page-aligned. The mappings must exist.
+// page-aligned. The mappings need not exist.
 // Optionally free the physical memory.
 void uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free) {
     uint64 a;
@@ -169,8 +200,12 @@ void uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free) {
         panic("uvmunmap: not aligned");
 
     for (a = va; a < va + npages * PGSIZE; a += PGSIZE) {
-        if ((pte = walk(pagetable, a, 0)) == 0)
-            panic("uvmunmap: walk");
+        if ((pte = walk(pagetable, a, 0)) == 0) {
+            continue;
+        }
+        if ((*pte) == 0) {
+            continue;
+        }
         if ((*pte & PTE_V) == 0)
             panic("uvmunmap: not mapped");
         if (PTE_FLAGS(*pte) == PTE_V)
@@ -180,6 +215,8 @@ void uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free) {
             kfree((void *)pa);
         }
         *pte = 0;
+
+        // printf("[xbhuang] pte freed, address: %p\n", (uint64)pte);
     }
 }
 
@@ -266,6 +303,9 @@ void freewalk(pagetable_t pagetable) {
             pagetable[i] = 0;
         }
         else if (pte & PTE_V) {
+            // printf("[xbhuang] leaf pte, address: %p\n",
+            // (uint64)&pagetable[i]);
+
             panic("freewalk: leaf");
         }
     }
@@ -293,8 +333,12 @@ int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz) {
     char *mem;
 
     for (i = 0; i < sz; i += PGSIZE) {
-        if ((pte = walk(old, i, 0)) == 0)
-            panic("uvmcopy: pte should exist");
+        if ((pte = walk(old, i, 0)) == 0) {
+            continue;
+        }
+        if ((*pte) == 0) {
+            continue;
+        }
         if ((*pte & PTE_V) == 0)
             panic("uvmcopy: page not present");
         pa = PTE2PA(*pte);

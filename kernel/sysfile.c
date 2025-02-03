@@ -60,6 +60,41 @@ uint64 sys_dup(void) {
     return fd;
 }
 
+pte_t *walk(pagetable_t, uint64, int);
+
+// returns 0 if OK; otherwise returns -1
+static int
+make_user_pagetable_range_valid(struct proc *p, uint64 va, uint64 sz) {
+    if (va >= MAXVA) {
+        return -1;
+    }
+
+    uint64 end = va + sz;
+
+    if (end > p->sz) {
+        return -1;
+    }
+
+    va = PGROUNDDOWN(va);
+    pagetable_t user_pagetable = p->pagetable;
+
+    while (va < end) {
+        pte_t *pte_ptr = walk(user_pagetable, va, 1);
+
+        if ((*pte_ptr) == 0) {
+            if (allocate_and_map_one_page_in_user_pagetable(user_pagetable, va)
+                == -1) {
+
+                return -1;
+            }
+        }
+
+        va += PGSIZE;
+    }
+
+    return 0;
+}
+
 uint64 sys_read(void) {
     struct file *f;
     int n;
@@ -67,6 +102,11 @@ uint64 sys_read(void) {
 
     if (argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
         return -1;
+
+    if (make_user_pagetable_range_valid(myproc(), p, n) == -1) {
+        return -1;
+    }
+
     return fileread(f, p, n);
 }
 
@@ -77,6 +117,10 @@ uint64 sys_write(void) {
 
     if (argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
         return -1;
+
+    if (make_user_pagetable_range_valid(myproc(), p, n) == -1) {
+        return -1;
+    }
 
     return filewrite(f, p, n);
 }
@@ -431,6 +475,11 @@ uint64 sys_pipe(void) {
 
     if (argaddr(0, &fdarray) < 0)
         return -1;
+
+    if (make_user_pagetable_range_valid(myproc(), fdarray, 8) == -1) {
+        return -1;
+    }
+
     if (pipealloc(&rf, &wf) < 0)
         return -1;
     fd0 = -1;

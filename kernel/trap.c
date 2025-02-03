@@ -60,9 +60,50 @@ void usertrap(void) {
 
         syscall();
     }
+
+    // load/store page fault
+    else if (r_scause() == 13 || r_scause() == 15) {
+        // printf("[xbhuang] usertrap\n");
+
+        uint64 request_va = r_stval();
+
+        // printf("[xbhuang] p->pid: %d\n", p->pid);
+        // printf("[xbhuang] p->sz: %p\n", (uint64)p->sz);
+        // printf("[xbhuang] p->trapframe->sp: %p\n", p->trapframe->sp);
+        // printf("[xbhuang] request_va: %p\n", request_va);
+
+        if (request_va >= p->sz) {
+            // printf("[xbhuang] out of bound\n");
+
+            p->killed = 1;
+        }
+
+        // exclude the guard page case
+        else if (request_va < p->trapframe->sp) {
+            p->killed = 1;
+        }
+
+        else {
+            if (allocate_and_map_one_page_in_user_pagetable(
+                    p->pagetable, request_va
+                )
+                == -1) {
+
+                // printf("[xbhuang] out of memory\n");
+
+                p->killed = 1;
+            }
+
+            else {
+                // printf("[xbhuang] usertrap OK\n");
+            }
+        }
+    }
+
     else if ((which_dev = devintr()) != 0) {
         // ok
     }
+
     else {
         printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
         printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());

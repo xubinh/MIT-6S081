@@ -31,15 +31,43 @@ uint64 sys_wait(void) {
 }
 
 uint64 sys_sbrk(void) {
-    int addr;
+    struct proc *p = myproc();
+    uint64 old_sz = p->sz;
     int n;
+    uint64 abs_n;
 
-    if (argint(0, &n) < 0)
+    if (argint(0, &n) < 0) {
         return -1;
-    addr = myproc()->sz;
-    if (growproc(n) < 0)
+    }
+
+    int is_negative = n < 0;
+
+    abs_n = (is_negative ? -n : n);
+
+    // printf("[xbhuang] sbrk\n");
+    // printf("[xbhuang] old size: %p\n", old_sz);
+    // printf("[xbhuang] n: %d\n", n);
+
+    if ((is_negative && old_sz < abs_n)
+        || (!is_negative && n > TRAPFRAME - old_sz)) {
+        // printf("[xbhuang] failed\n");
+
         return -1;
-    return addr;
+    }
+
+    if (is_negative) {
+        uvmdealloc(p->pagetable, old_sz, old_sz - abs_n);
+        p->sz -= abs_n;
+    }
+
+    else {
+        p->sz += abs_n;
+    }
+
+    // printf("[xbhuang] new size: %p\n", p->sz);
+    // printf("[xbhuang] sbrk OK\n");
+
+    return old_sz;
 }
 
 uint64 sys_sleep(void) {
