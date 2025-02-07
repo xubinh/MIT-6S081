@@ -1,0 +1,12 @@
+# answers-thread
+
+Q1: Why are there missing keys with 2 threads, but not with 1 thread? Identify a sequence of events with 2 threads that can lead to a key being missing. Submit your sequence with a short explanation in answers-thread.txt
+
+A:
+
+- The main reason of key missing is due to the contention on the updates of bucket entries. Since the updates are not protected by mutexes, there may be situations where one thread tries to make update but not yet finished and the other thread sees an entry that comes from an incomplete update and tries to make its own update, too. In this situation which thread's update will become the final result is uncertain, and whatever thread made its update, the other's update will be overwritten and lost.
+- One possible sequence of the above faulty situation is:
+  - thread 1: `insert(key, value, &table[i], table[i]);`
+  - thread 2: `insert(key, value, &table[i], table[i]);` (different `key`, but same `i`)
+  - thread 1: (inside `insert`, at the last line) `*p = e;` (thread 1's update)
+  - thread 2: (inside `insert`, at the last line) `*p = e;` (thread 2's update, which will overwrite thread 1's update)
