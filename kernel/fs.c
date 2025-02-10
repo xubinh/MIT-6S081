@@ -347,29 +347,121 @@ void iunlockput(struct inode *ip) {
 
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
-static uint bmap(struct inode *ip, uint bn) {
-    uint addr, *a;
-    struct buf *bp;
+static uint bmap(struct inode *inode_ptr, uint target_block_logical_number) {
+    if (target_block_logical_number < NDIRECT) {
+        uint target_block_direct_offset = target_block_logical_number;
 
-    if (bn < NDIRECT) {
-        if ((addr = ip->addrs[bn]) == 0)
-            ip->addrs[bn] = addr = balloc(ip->dev);
-        return addr;
-    }
-    bn -= NDIRECT;
+        uint target_block_physical_number =
+            inode_ptr->addrs[target_block_direct_offset];
 
-    if (bn < NINDIRECT) {
-        // Load indirect block, allocating if necessary.
-        if ((addr = ip->addrs[NDIRECT]) == 0)
-            ip->addrs[NDIRECT] = addr = balloc(ip->dev);
-        bp = bread(ip->dev, addr);
-        a = (uint *)bp->data;
-        if ((addr = a[bn]) == 0) {
-            a[bn] = addr = balloc(ip->dev);
-            log_write(bp);
+        if (target_block_physical_number == 0) {
+            target_block_physical_number = balloc(inode_ptr->dev);
+
+            inode_ptr->addrs[target_block_direct_offset] =
+                target_block_physical_number;
         }
-        brelse(bp);
-        return addr;
+
+        return target_block_physical_number;
+    }
+
+    else if (target_block_logical_number < NDIRECT + NINDIRECT) {
+        uint target_block_single_indirect_offset =
+            target_block_logical_number - NDIRECT;
+
+        uint single_indirect_book_keeping_block_number =
+            inode_ptr->addrs[NDIRECT];
+
+        if (single_indirect_book_keeping_block_number == 0) {
+            single_indirect_book_keeping_block_number = balloc(inode_ptr->dev);
+
+            inode_ptr->addrs[NDIRECT] =
+                single_indirect_book_keeping_block_number;
+        }
+
+        struct buf *buf_ptr =
+            bread(inode_ptr->dev, single_indirect_book_keeping_block_number);
+
+        uint *physical_block_numbers = (uint *)buf_ptr->data;
+
+        uint target_block_physical_block_number =
+            physical_block_numbers[target_block_single_indirect_offset];
+
+        if (target_block_physical_block_number == 0) {
+            target_block_physical_block_number = balloc(inode_ptr->dev);
+
+            physical_block_numbers[target_block_single_indirect_offset] =
+                target_block_physical_block_number;
+
+            log_write(buf_ptr);
+        }
+
+        brelse(buf_ptr);
+
+        return target_block_physical_block_number;
+    }
+
+    else if (target_block_logical_number < NDIRECT + NINDIRECT + NDOUBLEINDIRECT) {
+        uint target_block_double_indirect_offset =
+            target_block_logical_number - NDIRECT - NINDIRECT;
+
+        uint double_indirect_book_keeping_block_number =
+            inode_ptr->addrs[NDIRECT + 1];
+
+        if (double_indirect_book_keeping_block_number == 0) {
+            double_indirect_book_keeping_block_number = balloc(inode_ptr->dev);
+
+            inode_ptr->addrs[NDIRECT + 1] =
+                double_indirect_book_keeping_block_number;
+        }
+
+        struct buf *buf_ptr_1 =
+            bread(inode_ptr->dev, double_indirect_book_keeping_block_number);
+
+        uint *single_indirect_book_keeping_block_numbers =
+            (uint *)buf_ptr_1->data;
+
+        uint single_indirect_book_keeping_block_offset =
+            target_block_double_indirect_offset / NINDIRECT;
+
+        uint single_indirect_book_keeping_block_number =
+            single_indirect_book_keeping_block_numbers
+                [single_indirect_book_keeping_block_offset];
+
+        if (single_indirect_book_keeping_block_number == 0) {
+            single_indirect_book_keeping_block_number = balloc(inode_ptr->dev);
+
+            single_indirect_book_keeping_block_numbers
+                [single_indirect_book_keeping_block_offset] =
+                    single_indirect_book_keeping_block_number;
+
+            log_write(buf_ptr_1);
+        }
+
+        brelse(buf_ptr_1);
+
+        uint target_block_single_indirect_offset =
+            target_block_double_indirect_offset % NINDIRECT;
+
+        struct buf *buf_ptr_2 =
+            bread(inode_ptr->dev, single_indirect_book_keeping_block_number);
+
+        uint *physical_block_numbers = (uint *)buf_ptr_2->data;
+
+        uint target_block_physical_block_number =
+            physical_block_numbers[target_block_single_indirect_offset];
+
+        if (target_block_physical_block_number == 0) {
+            target_block_physical_block_number = balloc(inode_ptr->dev);
+
+            physical_block_numbers[target_block_single_indirect_offset] =
+                target_block_physical_block_number;
+
+            log_write(buf_ptr_2);
+        }
+
+        brelse(buf_ptr_2);
+
+        return target_block_physical_block_number;
     }
 
     panic("bmap: out of range");
@@ -377,32 +469,97 @@ static uint bmap(struct inode *ip, uint bn) {
 
 // Truncate inode (discard contents).
 // Caller must hold ip->lock.
-void itrunc(struct inode *ip) {
-    int i, j;
-    struct buf *bp;
-    uint *a;
+void itrunc(struct inode *inode_ptr) {
+    for (int physical_block_direct_offset = 0;
+         physical_block_direct_offset < NDIRECT;
+         physical_block_direct_offset++) {
 
-    for (i = 0; i < NDIRECT; i++) {
-        if (ip->addrs[i]) {
-            bfree(ip->dev, ip->addrs[i]);
-            ip->addrs[i] = 0;
+        if (!inode_ptr->addrs[physical_block_direct_offset]) {
+            continue;
         }
+
+        bfree(inode_ptr->dev, inode_ptr->addrs[physical_block_direct_offset]);
+        inode_ptr->addrs[physical_block_direct_offset] = 0;
     }
 
-    if (ip->addrs[NDIRECT]) {
-        bp = bread(ip->dev, ip->addrs[NDIRECT]);
-        a = (uint *)bp->data;
-        for (j = 0; j < NINDIRECT; j++) {
-            if (a[j])
-                bfree(ip->dev, a[j]);
+    if (inode_ptr->addrs[NDIRECT]) {
+        struct buf *buf_ptr = bread(inode_ptr->dev, inode_ptr->addrs[NDIRECT]);
+        uint *physical_block_numbers = (uint *)buf_ptr->data;
+
+        for (int physical_block_single_indirect_offset = 0;
+             physical_block_single_indirect_offset < NINDIRECT;
+             physical_block_single_indirect_offset++) {
+
+            if (!physical_block_numbers
+                    [physical_block_single_indirect_offset]) {
+                continue;
+            }
+
+            bfree(
+                inode_ptr->dev,
+                physical_block_numbers[physical_block_single_indirect_offset]
+            );
         }
-        brelse(bp);
-        bfree(ip->dev, ip->addrs[NDIRECT]);
-        ip->addrs[NDIRECT] = 0;
+
+        brelse(buf_ptr);
+
+        bfree(inode_ptr->dev, inode_ptr->addrs[NDIRECT]);
+
+        inode_ptr->addrs[NDIRECT] = 0;
     }
 
-    ip->size = 0;
-    iupdate(ip);
+    if (inode_ptr->addrs[NDIRECT + 1]) {
+        struct buf *buf_ptr_1 =
+            bread(inode_ptr->dev, inode_ptr->addrs[NDIRECT + 1]);
+        uint *single_indirect_book_keeping_block_numbers =
+            (uint *)buf_ptr_1->data;
+
+        for (int single_indirect_book_keeping_block_offset = 0;
+             single_indirect_book_keeping_block_offset < NINDIRECT;
+             single_indirect_book_keeping_block_offset++) {
+
+            if (!single_indirect_book_keeping_block_numbers
+                    [single_indirect_book_keeping_block_offset]) {
+                continue;
+            }
+
+            uint single_indirect_book_keeping_block_number =
+                single_indirect_book_keeping_block_numbers
+                    [single_indirect_book_keeping_block_offset];
+
+            struct buf *buf_ptr_2 = bread(
+                inode_ptr->dev, single_indirect_book_keeping_block_number
+            );
+            uint *physical_block_numbers = (uint *)buf_ptr_2->data;
+
+            for (int physical_block_single_indirect_offset = 0;
+                 physical_block_single_indirect_offset < NINDIRECT;
+                 physical_block_single_indirect_offset++) {
+
+                if (!physical_block_numbers
+                        [physical_block_single_indirect_offset]) {
+                    continue;
+                }
+
+                bfree(
+                    inode_ptr->dev,
+                    physical_block_numbers
+                        [physical_block_single_indirect_offset]
+                );
+            }
+
+            brelse(buf_ptr_2);
+        }
+
+        brelse(buf_ptr_1);
+
+        bfree(inode_ptr->dev, inode_ptr->addrs[NDIRECT]);
+
+        inode_ptr->addrs[NDIRECT + 1] = 0;
+    }
+
+    inode_ptr->size = 0;
+    iupdate(inode_ptr);
 }
 
 // Copy stat information from inode.
