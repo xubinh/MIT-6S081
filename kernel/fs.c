@@ -273,7 +273,7 @@ void ilock(struct inode *ip) {
     if (ip == 0 || ip->ref < 1)
         panic("ilock");
 
-    printf("[ilock] try lock: %p, PID: %d\n", (uint64)ip, myproc()->pid);
+    // printf("[ilock] try lock: %p, PID: %d\n", (uint64)ip, myproc()->pid);
     acquiresleep(&ip->lock);
 
     if (ip->valid == 0) {
@@ -298,7 +298,7 @@ void iunlock(struct inode *ip) {
         panic("iunlock");
 
     releasesleep(&ip->lock);
-    printf("[iunlock] unlocked: %p, PID: %d\n", (uint64)ip, myproc()->pid);
+    // printf("[iunlock] unlocked: %p, PID: %d\n", (uint64)ip, myproc()->pid);
 }
 
 // Drop a reference to an in-memory inode.
@@ -361,6 +361,8 @@ static uint bmap(struct inode *inode_ptr, uint target_block_logical_number) {
 
             inode_ptr->addrs[target_block_direct_offset] =
                 target_block_physical_number;
+
+            // printf("allocating target block: %d\n", target_block_physical_number);
         }
 
         return target_block_physical_number;
@@ -378,6 +380,8 @@ static uint bmap(struct inode *inode_ptr, uint target_block_logical_number) {
 
             inode_ptr->addrs[NDIRECT] =
                 single_indirect_book_keeping_block_number;
+
+            // printf("allocating single indirect book keeping block: %d\n", single_indirect_book_keeping_block_number);
         }
 
         struct buf *buf_ptr =
@@ -385,21 +389,23 @@ static uint bmap(struct inode *inode_ptr, uint target_block_logical_number) {
 
         uint *physical_block_numbers = (uint *)buf_ptr->data;
 
-        uint target_block_physical_block_number =
+        uint target_block_physical_number =
             physical_block_numbers[target_block_single_indirect_offset];
 
-        if (target_block_physical_block_number == 0) {
-            target_block_physical_block_number = balloc(inode_ptr->dev);
+        if (target_block_physical_number == 0) {
+            target_block_physical_number = balloc(inode_ptr->dev);
 
             physical_block_numbers[target_block_single_indirect_offset] =
-                target_block_physical_block_number;
+                target_block_physical_number;
 
             log_write(buf_ptr);
+
+            // printf("allocating target block: %d\n", target_block_physical_number);
         }
 
         brelse(buf_ptr);
 
-        return target_block_physical_block_number;
+        return target_block_physical_number;
     }
 
     else if (target_block_logical_number < NDIRECT + NINDIRECT + NDOUBLEINDIRECT) {
@@ -414,6 +420,8 @@ static uint bmap(struct inode *inode_ptr, uint target_block_logical_number) {
 
             inode_ptr->addrs[NDIRECT + 1] =
                 double_indirect_book_keeping_block_number;
+
+            // printf("allocating double indirect book keeping block: %d\n", double_indirect_book_keeping_block_number);
         }
 
         struct buf *buf_ptr_1 =
@@ -437,6 +445,8 @@ static uint bmap(struct inode *inode_ptr, uint target_block_logical_number) {
                     single_indirect_book_keeping_block_number;
 
             log_write(buf_ptr_1);
+
+            // printf("allocating single indirect book keeping block: %d\n", single_indirect_book_keeping_block_offset);
         }
 
         brelse(buf_ptr_1);
@@ -449,21 +459,23 @@ static uint bmap(struct inode *inode_ptr, uint target_block_logical_number) {
 
         uint *physical_block_numbers = (uint *)buf_ptr_2->data;
 
-        uint target_block_physical_block_number =
+        uint target_block_physical_number =
             physical_block_numbers[target_block_single_indirect_offset];
 
-        if (target_block_physical_block_number == 0) {
-            target_block_physical_block_number = balloc(inode_ptr->dev);
+        if (target_block_physical_number == 0) {
+            target_block_physical_number = balloc(inode_ptr->dev);
 
             physical_block_numbers[target_block_single_indirect_offset] =
-                target_block_physical_block_number;
+                target_block_physical_number;
 
             log_write(buf_ptr_2);
+
+            // printf("allocating target block: %d\n", target_block_physical_number);
         }
 
         brelse(buf_ptr_2);
 
-        return target_block_physical_block_number;
+        return target_block_physical_number;
     }
 
     panic("bmap: out of range");
@@ -749,8 +761,8 @@ static struct inode *namex(char *path, int nameiparent, char *name) {
         ip = idup(myproc()->cwd);
 
     while ((path = skipelem(path, name)) != 0) {
-        printf("[namex] name: \"%s\", remaining path: \"%s\", PID: %d\n", (uint64) name, (uint64)path, myproc()->pid);
-        printf("[namex] try lock: %p\n", (uint64)ip);
+        // printf("[namex] name: \"%s\", remaining path: \"%s\", PID: %d\n", (uint64) name, (uint64)path, myproc()->pid);
+        // printf("[namex] try lock: %p\n", (uint64)ip);
         ilock(ip);
         if (ip->type != T_DIR) {
             iunlockput(ip);
@@ -772,7 +784,7 @@ static struct inode *namex(char *path, int nameiparent, char *name) {
         iput(ip);
         return 0;
     }
-    printf("[namex] ip: %p\n", (uint64)ip);
+    // printf("[namex] ip: %p\n", (uint64)ip);
     return ip;
 }
 

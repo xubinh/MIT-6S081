@@ -219,7 +219,7 @@ bad:
 }
 
 static struct inode *create(char *path, short type, short major, short minor) {
-    printf("[create] entering, PID: %d\n", myproc()->pid);
+    // printf("[create] entering, PID: %d\n", myproc()->pid);
     struct inode *ip, *dp;
     char name[DIRSIZ];
 
@@ -292,7 +292,7 @@ static int _merge_symlink_path(char *path, int path_length, char *target, int ta
 }
 
 uint64 sys_open(void) {
-    printf("[sys_open] entering, PID: %d\n", myproc()->pid);
+    // printf("[sys_open] entering, PID: %d\n", myproc()->pid);
     char path[MAXPATH];
     int fd, omode;
     struct file *f;
@@ -317,8 +317,8 @@ uint64 sys_open(void) {
         int max_number_of_symlink_jumps = 10;
 
         while(number_of_symlink_jumps < max_number_of_symlink_jumps) {
-            printf("[sys_open] number_of_symlink_jumps: %d\n", number_of_symlink_jumps);
-            printf("[sys_open] path: %s\n", (uint64)path);
+            // printf("[sys_open] number_of_symlink_jumps: %d\n", number_of_symlink_jumps);
+            // printf("[sys_open] path: %s\n", (uint64)path);
             if ((ip = namei(path)) == 0) {
                 end_op();
                 return -1;
@@ -541,7 +541,7 @@ uint64 sys_pipe(void) {
 }
 
 uint64 sys_symlink(void) {
-    printf("[sys_symlink] entering, PID: %d\n", myproc()->pid);
+    // printf("[sys_symlink] entering, PID: %d\n", myproc()->pid);
     char target[MAXPATH];
     uint target_length;
     char path[MAXPATH];
@@ -550,8 +550,8 @@ uint64 sys_symlink(void) {
         return -1;
     }
 
-    printf("[sys_symlink] path: %s\n", (uint64)path);
-    printf("[sys_symlink] target: %s\n", (uint64)target);
+    // printf("[sys_symlink] path: %s\n", (uint64)path);
+    // printf("[sys_symlink] target: %s\n", (uint64)target);
 
     begin_op();
 
