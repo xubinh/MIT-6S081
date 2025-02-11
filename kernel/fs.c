@@ -273,6 +273,7 @@ void ilock(struct inode *ip) {
     if (ip == 0 || ip->ref < 1)
         panic("ilock");
 
+    printf("[ilock] try lock: %p, PID: %d\n", (uint64)ip, myproc()->pid);
     acquiresleep(&ip->lock);
 
     if (ip->valid == 0) {
@@ -297,6 +298,7 @@ void iunlock(struct inode *ip) {
         panic("iunlock");
 
     releasesleep(&ip->lock);
+    printf("[iunlock] unlocked: %p, PID: %d\n", (uint64)ip, myproc()->pid);
 }
 
 // Drop a reference to an in-memory inode.
@@ -738,6 +740,7 @@ static char *skipelem(char *path, char *name) {
 // path element into name, which must have room for DIRSIZ bytes.
 // Must be called inside a transaction since it calls iput().
 static struct inode *namex(char *path, int nameiparent, char *name) {
+    // printf("namex\n");
     struct inode *ip, *next;
 
     if (*path == '/')
@@ -746,6 +749,8 @@ static struct inode *namex(char *path, int nameiparent, char *name) {
         ip = idup(myproc()->cwd);
 
     while ((path = skipelem(path, name)) != 0) {
+        printf("[namex] name: \"%s\", remaining path: \"%s\", PID: %d\n", (uint64) name, (uint64)path, myproc()->pid);
+        printf("[namex] try lock: %p\n", (uint64)ip);
         ilock(ip);
         if (ip->type != T_DIR) {
             iunlockput(ip);
@@ -767,6 +772,7 @@ static struct inode *namex(char *path, int nameiparent, char *name) {
         iput(ip);
         return 0;
     }
+    printf("[namex] ip: %p\n", (uint64)ip);
     return ip;
 }
 

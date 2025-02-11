@@ -219,6 +219,7 @@ bad:
 }
 
 static struct inode *create(char *path, short type, short major, short minor) {
+    printf("[create] entering, PID: %d\n", myproc()->pid);
     struct inode *ip, *dp;
     char name[DIRSIZ];
 
@@ -229,6 +230,11 @@ static struct inode *create(char *path, short type, short major, short minor) {
 
     if ((ip = dirlookup(dp, name, 0)) != 0) {
         iunlockput(dp);
+        // symlink creation must not overwrite any existing file
+        if(type == T_SYMLINK) {
+            iput(ip);
+            return 0;
+        }
         ilock(ip);
         if (type == T_FILE && (ip->type == T_FILE || ip->type == T_DEVICE))
             return ip;
@@ -261,7 +267,32 @@ static struct inode *create(char *path, short type, short major, short minor) {
     return ip;
 }
 
+static int _merge_symlink_path(char *path, int path_length, char *target, int target_length) {
+    if (path_length == 0) {
+        return -1;
+    }
+
+    char *last_slash = strrchr(path, path_length, '/');
+
+    if (last_slash) {
+        *(last_slash + 1) = '\0';
+        path_length = (last_slash + 1) - path;
+    } else {
+        path[0] = '\0';
+        path_length = 0;
+    }
+
+    if (path_length + target_length >= MAXPATH) {
+        return -1;
+    }
+
+    strcat(path, path_length, target, target_length);
+
+    return 0;
+}
+
 uint64 sys_open(void) {
+    printf("[sys_open] entering, PID: %d\n", myproc()->pid);
     char path[MAXPATH];
     int fd, omode;
     struct file *f;
@@ -281,11 +312,66 @@ uint64 sys_open(void) {
         }
     }
     else {
-        if ((ip = namei(path)) == 0) {
+        int is_symlink = 0;
+        int number_of_symlink_jumps = 0;
+        int max_number_of_symlink_jumps = 10;
+
+        while(number_of_symlink_jumps < max_number_of_symlink_jumps) {
+            printf("[sys_open] number_of_symlink_jumps: %d\n", number_of_symlink_jumps);
+            printf("[sys_open] path: %s\n", (uint64)path);
+            if ((ip = namei(path)) == 0) {
+                end_op();
+                return -1;
+            }
+
+            ilock(ip);
+
+            if(ip->type != T_SYMLINK || omode & O_NOFOLLOW) {
+                break;
+            }
+
+            is_symlink = 1;
+
+            char target[MAXPATH];
+            int target_length = ip->size;
+
+            if(target_length >= MAXPATH || readi(ip, 0, (uint64)target, 0, target_length) < target_length) {
+                iunlockput(ip);
+                end_op();
+                return -1;
+            }
+
+            if(target[0] == '/') {
+                path[0] = '\0';
+                strcat(path, 0, target, target_length);
+            }
+
+            else{
+                if(_merge_symlink_path(path, strlen(path), target, target_length) == -1) {
+                    iunlockput(ip);
+                    end_op();
+                    return -1;
+                }
+            }
+
+            iunlockput(ip);
+
+            number_of_symlink_jumps++;
+        }
+
+        // simulating the case where the chain of symlinks contains a cycle
+        if(number_of_symlink_jumps == max_number_of_symlink_jumps) {
             end_op();
             return -1;
         }
-        ilock(ip);
+
+        // symlink to dir is not required for this lab
+        if(is_symlink && ip->type == T_DIR) {
+            iunlockput(ip);
+            end_op();
+            return -1;
+        }
+
         if (ip->type == T_DIR && omode != O_RDONLY) {
             iunlockput(ip);
             end_op();
@@ -451,5 +537,39 @@ uint64 sys_pipe(void) {
         fileclose(wf);
         return -1;
     }
+    return 0;
+}
+
+uint64 sys_symlink(void) {
+    printf("[sys_symlink] entering, PID: %d\n", myproc()->pid);
+    char target[MAXPATH];
+    uint target_length;
+    char path[MAXPATH];
+
+    if ((target_length = argstr(0, target, MAXPATH)) < 0 || argstr(1, path, MAXPATH) < 0){
+        return -1;
+    }
+
+    printf("[sys_symlink] path: %s\n", (uint64)path);
+    printf("[sys_symlink] target: %s\n", (uint64)target);
+
+    begin_op();
+
+    struct inode *inode_ptr = create(path, T_SYMLINK, 0, 0);
+
+    // symlink creation must not overwrite any existing file
+    if(inode_ptr == 0) {
+        end_op();
+        return -1;
+    }
+
+    if(writei(inode_ptr, 0, (uint64)target, 0, target_length) == -1) {
+        panic("sys_symlink: never reaches here");
+    }
+
+    iunlockput(inode_ptr);
+
+    end_op();
+
     return 0;
 }

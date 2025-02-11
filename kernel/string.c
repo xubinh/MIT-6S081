@@ -86,3 +86,23 @@ int strlen(const char *s) {
         ;
     return n;
 }
+
+char *strrchr(char *s, int l, const char c) {
+    for (int p = l - 1; p >= 0; p--) {
+        if (s[p] == c) {
+            return s + p;
+        }
+    }
+
+    return 0;
+}
+
+void strcat(
+    char *dest, const int dest_len, const char *src, const int src_len
+) {
+    for (int i = 0; i < src_len; i++) {
+        dest[dest_len + i] = src[i];
+    }
+
+    dest[dest_len + src_len] = '\0';
+}
