@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "fcntl.h"
 
 uint64 sys_exit(void) {
     int n;
@@ -37,6 +38,9 @@ uint64 sys_sbrk(void) {
     if (argint(0, &n) < 0)
         return -1;
     addr = myproc()->sz;
+    if (n > 0 && ((uint64)addr + n > (uint64)MMAPBASE)) {
+        return -1;
+    }
     if (growproc(n) < 0)
         return -1;
     return addr;
@@ -78,4 +82,66 @@ uint64 sys_uptime(void) {
     xticks = ticks;
     release(&tickslock);
     return xticks;
+}
+
+uint64 sys_mmap(void) {
+    uint64 addr;
+    int length;
+    int prot;
+    int flags;
+    int fd;
+    int offset;
+
+    if (argaddr(0, &addr) < 0 || argint(1, &length) < 0 || argint(2, &prot) < 0
+        || argint(3, &flags) < 0 || argint(4, &fd) < 0
+        || argint(5, &offset) < 0) {
+
+        return -1;
+    }
+
+    if (addr != 0) {
+        return -1;
+    }
+
+    if (length <= 0) {
+        return -1;
+    }
+
+    if (prot & ~(PROT_READ | PROT_WRITE)) {
+        return -1;
+    }
+
+    if ((flags & ~(MAP_SHARED | MAP_PRIVATE))
+        || ((flags & MAP_SHARED) && (flags & MAP_PRIVATE))) {
+        return -1;
+    }
+
+    if (fd < 0) {
+        return -1;
+    }
+
+    if (offset != 0) {
+        return -1;
+    }
+
+    return mmap(length, prot, flags, fd);
+}
+
+uint64 sys_munmap(void) {
+    uint64 addr;
+    int length;
+
+    if (argaddr(0, &addr) < 0 || argint(1, &length) < 0) {
+        return -1;
+    }
+
+    if (length < 0) {
+        return -1;
+    }
+
+    else if (length == 0) {
+        return 0;
+    }
+
+    return munmap(addr, length);
 }

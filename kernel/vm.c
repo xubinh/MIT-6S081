@@ -307,6 +307,197 @@ err:
     return -1;
 }
 
+// copy physical pages along with all the required page table pages inside the
+// given range return 0 if failed
+int copy_page_table_in_range_selectively(
+    pagetable_t parent_pagetable,
+    pagetable_t child_pagetable,
+    uint64 aligned_page_start_va,
+    uint64 aligned_page_end_va
+) {
+    uint64 current_page_va = aligned_page_start_va;
+
+    for (int pagetable_offset_level_2 = PX(2, current_page_va);
+         current_page_va < aligned_page_end_va
+         && pagetable_offset_level_2 < 512;
+         pagetable_offset_level_2++) {
+        pte_t pte_2 = parent_pagetable[pagetable_offset_level_2];
+
+        if (pte_2 == 0) {
+            current_page_va = (pagetable_offset_level_2 + 1) << (12 + 9 * 2);
+
+            continue;
+        }
+
+        pagetable_t pagetable_level_1 = (pagetable_t)PTE2PA(pte_2);
+
+        for (int pagetable_offset_level_1 = PX(1, current_page_va);
+             current_page_va < aligned_page_end_va
+             && pagetable_offset_level_1 < 512;
+             pagetable_offset_level_1++) {
+            pte_t pte_1 = pagetable_level_1[pagetable_offset_level_1];
+
+            if (pte_1 == 0) {
+                current_page_va =
+                    (pagetable_offset_level_2 << (12 + 9 * 2))
+                    + ((pagetable_offset_level_1 + 1) << (12 + 9 * 1));
+
+                continue;
+            }
+
+            pagetable_t pagetable_level_0 = (pagetable_t)PTE2PA(pte_1);
+
+            for (int pagetable_offset_level_0 = PX(0, current_page_va);
+                 current_page_va < aligned_page_end_va
+                 && pagetable_offset_level_0 < 512;
+                 pagetable_offset_level_0++) {
+                pte_t pte_0 = pagetable_level_0[pagetable_offset_level_0];
+
+                if (pte_0 == 0) {
+                    current_page_va += PGSIZE;
+
+                    continue;
+                }
+
+                uint64 physical_page_pa = PTE2PA(pte_0);
+
+                uint64 new_physical_page_pa = (uint64)kalloc();
+
+                if (new_physical_page_pa == 0) {
+                    return 0;
+                }
+
+                if (mappages(
+                        child_pagetable,
+                        current_page_va,
+                        PGSIZE,
+                        new_physical_page_pa,
+                        PTE_FLAGS(pte_0)
+                    )
+                    != 0) {
+
+                    kfree((void *)new_physical_page_pa);
+
+                    return 0;
+                }
+
+                memmove(
+                    (void *)new_physical_page_pa,
+                    (const void *)physical_page_pa,
+                    PGSIZE
+                );
+
+                current_page_va += PGSIZE;
+            }
+        }
+    }
+
+    return 1;
+}
+
+void deallocate_physical_pages_in_range_selectively(
+    pagetable_t pagetable,
+    uint64 aligned_page_start_va,
+    uint64 aligned_page_end_va
+) {
+    uint64 current_page_va = aligned_page_start_va;
+
+    for (int pagetable_offset_level_2 = PX(2, current_page_va);
+         current_page_va < aligned_page_end_va
+         && pagetable_offset_level_2 < 512;
+         pagetable_offset_level_2++) {
+        pte_t pte_2 = pagetable[pagetable_offset_level_2];
+
+        if (pte_2 == 0) {
+            current_page_va = (pagetable_offset_level_2 + 1) << (12 + 9 * 2);
+
+            continue;
+        }
+
+        pagetable_t pagetable_level_1 = (pagetable_t)PTE2PA(pte_2);
+
+        for (int pagetable_offset_level_1 = PX(1, current_page_va);
+             current_page_va < aligned_page_end_va
+             && pagetable_offset_level_1 < 512;
+             pagetable_offset_level_1++) {
+            pte_t pte_1 = pagetable_level_1[pagetable_offset_level_1];
+
+            if (pte_1 == 0) {
+                current_page_va =
+                    (pagetable_offset_level_2 << (12 + 9 * 2))
+                    + ((pagetable_offset_level_1 + 1) << (12 + 9 * 1));
+
+                continue;
+            }
+
+            pagetable_t pagetable_level_0 = (pagetable_t)PTE2PA(pte_1);
+
+            for (int pagetable_offset_level_0 = PX(0, current_page_va);
+                 current_page_va < aligned_page_end_va
+                 && pagetable_offset_level_0 < 512;
+                 pagetable_offset_level_0++) {
+                pte_t pte_0 = pagetable_level_0[pagetable_offset_level_0];
+
+                if (pte_0 == 0) {
+                    current_page_va += PGSIZE;
+
+                    continue;
+                }
+
+                kfree((pagetable_t)PTE2PA(pte_0));
+
+                pagetable_level_0[pagetable_offset_level_0] = 0;
+
+                current_page_va += PGSIZE;
+            }
+        }
+    }
+}
+
+// the caller must ensure that there is no physical pages left in the first and
+// the last level 0 page table pages, or there will be memory leaks
+void deallocate_pagetable_pages_in_range_selectively(
+    pagetable_t pagetable,
+    uint64 aligned_page_start_va,
+    uint64 aligned_page_end_va
+) {
+    uint64 current_page_va = aligned_page_start_va;
+
+    for (int pagetable_offset_level_2 = PX(2, current_page_va);
+         current_page_va < aligned_page_end_va
+         && pagetable_offset_level_2 < 512;
+         pagetable_offset_level_2++) {
+        pte_t pte_2 = pagetable[pagetable_offset_level_2];
+
+        if (pte_2 != 0) {
+            pagetable_t pagetable_level_1 = (pagetable_t)PTE2PA(pte_2);
+
+            for (int pagetable_offset_level_1 = PX(1, current_page_va);
+                 current_page_va < aligned_page_end_va
+                 && pagetable_offset_level_1 < 512;
+                 pagetable_offset_level_1++) {
+                pte_t pte_1 = pagetable_level_1[pagetable_offset_level_1];
+
+                if (pte_1 != 0) {
+                    kfree((pagetable_t)PTE2PA(pte_1));
+
+                    pagetable_level_1[pagetable_offset_level_1] = 0;
+                }
+
+                current_page_va =
+                    (pagetable_offset_level_2 << (12 + 9 * 2))
+                    + ((pagetable_offset_level_1 + 1) << (12 + 9 * 1));
+            }
+
+            kfree((pagetable_t)PTE2PA(pte_2));
+
+            pagetable[pagetable_offset_level_2] = 0;
+        }
+
+        current_page_va = (pagetable_offset_level_2 + 1) << (12 + 9 * 2);
+    }
+}
+
 // mark a PTE invalid for user access.
 // used by exec for the user stack guard page.
 void uvmclear(pagetable_t pagetable, uint64 va) {

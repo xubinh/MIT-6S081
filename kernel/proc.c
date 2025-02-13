@@ -5,10 +5,17 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
 
 struct cpu cpus[NCPU];
 
 struct proc proc[NPROC];
+
+struct {
+    struct vma pool[NVMA];
+    int is_free[NVMA];
+    struct spinlock lock;
+} global_vma_pool;
 
 struct proc *initproc;
 
@@ -18,8 +25,54 @@ struct spinlock pid_lock;
 extern void forkret(void);
 static void wakeup1(struct proc *chan);
 static void freeproc(struct proc *p);
+static void _munmap_all(struct proc *current_process_ptr);
 
 extern char trampoline[]; // trampoline.S
+
+static void _initialize_vma_pool() {
+    initlock(&global_vma_pool.lock, "global_vma_pool");
+
+    for (int i = 0; i < NVMA; i++) {
+        global_vma_pool.is_free[i] = 1;
+    }
+}
+
+// return 0 if failed
+static struct vma *_allocate_vma_from_global_pool() {
+    acquire(&global_vma_pool.lock);
+
+    for (int offset = 0; offset < NVMA; offset++) {
+        if (global_vma_pool.is_free[offset]) {
+            global_vma_pool.is_free[offset] = 0;
+
+            release(&global_vma_pool.lock);
+
+            return &global_vma_pool.pool[offset];
+        }
+    }
+
+    release(&global_vma_pool.lock);
+
+    return 0;
+}
+
+static void _deallocate_vma_to_global_pool(struct vma *vma_ptr) {
+    int offset = (int)(vma_ptr - global_vma_pool.pool);
+
+    if (offset >= 0 && offset < NVMA) {
+        acquire(&global_vma_pool.lock);
+
+        global_vma_pool.is_free[offset] = 1;
+
+        release(&global_vma_pool.lock);
+    }
+
+    else {
+        panic("_deallocate_vma_to_global_pool: invalid pointer");
+    }
+
+    return;
+}
 
 // Allocate a page for each process's kernel stack.
 // Map it high in memory, followed by an invalid
@@ -44,7 +97,10 @@ void procinit(void) {
     for (p = proc; p < &proc[NPROC]; p++) {
         initlock(&p->lock, "proc");
         p->kstack = KSTACK((int)(p - proc));
+        p->max_mmap_range_end_va = MMAPBASE;
     }
+
+    _initialize_vma_pool();
 }
 
 // Must be called with interrupts disabled,
@@ -242,6 +298,82 @@ int growproc(int n) {
     return 0;
 }
 
+// allocates page table pages and physical pages
+// deallocates all physical pages when out of memory (but not the page table
+// pages)
+// the vma_offset passed in must point to an non-null vma_ptr slot
+// return 0 if failed
+static int
+_vma_copy_one(struct proc *parent, struct proc *child, int vma_offset) {
+    pagetable_t parent_pagetable = parent->pagetable;
+    pagetable_t child_pagetable = child->pagetable;
+    struct vma *vma_ptr =
+        parent->mapped_vma_ranges[vma_offset]; // guaranteed to be non-null
+    uint64 aligned_page_start_va = PGROUNDDOWN(vma_ptr->range_start_va);
+    uint64 current_mmap_range_end_va =
+        vma_ptr->range_start_va + vma_ptr->range_size;
+    uint64 aligned_page_end_va = PGROUNDUP(current_mmap_range_end_va);
+
+    struct vma *allocated_vma_ptr = _allocate_vma_from_global_pool();
+
+    // out of memory
+    if (!allocated_vma_ptr) {
+        return -1;
+    }
+
+    // update the max range of page table pages first in case of OOM
+    if (child->max_mmap_range_end_va < current_mmap_range_end_va) {
+        child->max_mmap_range_end_va = current_mmap_range_end_va;
+    }
+
+    // out of memory
+    if (!copy_page_table_in_range_selectively(
+            parent_pagetable,
+            child_pagetable,
+            aligned_page_start_va,
+            aligned_page_end_va
+        )) {
+        deallocate_physical_pages_in_range_selectively(
+            child_pagetable, aligned_page_start_va, aligned_page_end_va
+        );
+
+        _deallocate_vma_to_global_pool(allocated_vma_ptr);
+
+        return 0;
+    }
+
+    filedup(vma_ptr->backed_file_ptr);
+
+    allocated_vma_ptr->range_start_va = vma_ptr->range_start_va;
+    allocated_vma_ptr->range_size = vma_ptr->range_size;
+    allocated_vma_ptr->backed_file_ptr = vma_ptr->backed_file_ptr;
+    allocated_vma_ptr->backed_file_offset = vma_ptr->backed_file_offset;
+    allocated_vma_ptr->need_write_back = vma_ptr->need_write_back;
+    allocated_vma_ptr->readable = vma_ptr->readable;
+    allocated_vma_ptr->writable = vma_ptr->writable;
+
+    child->mapped_vma_ranges[vma_offset] = allocated_vma_ptr;
+
+    return 1;
+}
+
+// return 0 if failed
+static int _vma_copy(struct proc *parent, struct proc *child) {
+    for (int vma_offset = 0; vma_offset < NVMA; vma_offset++) {
+        if (!parent->mapped_vma_ranges[vma_offset]) {
+            continue;
+        }
+
+        if (!_vma_copy_one(parent, child, vma_offset)) {
+            _munmap_all(child);
+
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 // Create a new process, copying the parent.
 // Sets up child kernel stack to return as if from fork() system call.
 int fork(void) {
@@ -261,6 +393,12 @@ int fork(void) {
         return -1;
     }
     np->sz = p->sz;
+
+    if (!_vma_copy(p, np)) {
+        freeproc(np);
+        release(&np->lock);
+        return -1;
+    }
 
     np->parent = p;
 
@@ -331,6 +469,7 @@ void exit(int status) {
 
     begin_op();
     iput(p->cwd);
+    _munmap_all(p);
     end_op();
     p->cwd = 0;
 
@@ -658,4 +797,341 @@ void procdump(void) {
         printf("%d %s %s", p->pid, state, p->name);
         printf("\n");
     }
+}
+
+// the returned address is guaranteed to be page-aligned
+// return 0 if failed
+static uint64
+_get_next_vma_range_start_va(struct proc *current_process_ptr, uint64 length) {
+    uint64 highest_vma_range_end_va = PGROUNDUP(MMAPBASE);
+
+    for (int vma_offset = 0; vma_offset < NVMA; vma_offset++) {
+        struct vma *vma_ptr =
+            current_process_ptr->mapped_vma_ranges[vma_offset];
+
+        if (!vma_ptr) {
+            continue;
+        }
+
+        uint64 current_vma_range_end_va =
+            PGROUNDUP(vma_ptr->range_start_va + vma_ptr->range_size);
+
+        highest_vma_range_end_va =
+            highest_vma_range_end_va < current_vma_range_end_va
+                ? current_vma_range_end_va
+                : highest_vma_range_end_va;
+    }
+
+    return length > TRAPFRAME - highest_vma_range_end_va
+               ? 0
+               : highest_vma_range_end_va;
+}
+
+// return 0 if failed
+static int
+_check_file_permission(struct file *backed_file_ptr, int prot, int flags) {
+    if ((prot & PROT_READ) && !is_readable(backed_file_ptr)) {
+        return 0;
+    }
+
+    if ((prot & PROT_WRITE)
+        && !(is_writable(backed_file_ptr) || (flags & MAP_PRIVATE))) {
+        return 0;
+    }
+
+    return 1;
+}
+
+uint64 mmap(int length, int prot, int flags, int fd) {
+    struct proc *current_process_ptr = myproc();
+
+    uint64 next_vma_range_start_va =
+        _get_next_vma_range_start_va(current_process_ptr, length);
+
+    // out of memory
+    if (!next_vma_range_start_va) {
+        // printf("[mmap] out of memory: running out mmap region\n");
+
+        return -1;
+    }
+
+    int current_process_vma_offset = -1;
+
+    for (int i = 0; i < NVMA; i++) {
+        if (current_process_ptr->mapped_vma_ranges[i] == 0) {
+            current_process_vma_offset = i;
+
+            break;
+        }
+    }
+
+    // out of memory
+    if (current_process_vma_offset == -1) {
+        // printf("[mmap] out of memory: running out current process's vma
+        // slot\n"
+        // );
+
+        return -1;
+    }
+
+    struct file *backed_file_ptr = current_process_ptr->ofile[fd];
+
+    if (!backed_file_ptr || !is_normal_file(backed_file_ptr)
+        || !_check_file_permission(backed_file_ptr, prot, flags)) {
+
+        // printf("[mmap] invalid file or permission\n");
+
+        return -1;
+    }
+
+    struct vma *allocated_vma_ptr = _allocate_vma_from_global_pool();
+
+    // out of memory
+    if (!allocated_vma_ptr) {
+        // printf("[mmap] out of memory: running out global vma pool\n");
+
+        return -1;
+    }
+
+    filedup(backed_file_ptr);
+
+    allocated_vma_ptr->range_start_va = next_vma_range_start_va;
+    allocated_vma_ptr->range_size = length;
+    allocated_vma_ptr->backed_file_ptr = backed_file_ptr;
+    allocated_vma_ptr->backed_file_offset = 0;
+    allocated_vma_ptr->need_write_back = flags & MAP_SHARED;
+    allocated_vma_ptr->readable = prot & PROT_READ;
+    allocated_vma_ptr->writable = prot & PROT_WRITE;
+
+    current_process_ptr->mapped_vma_ranges[current_process_vma_offset] =
+        allocated_vma_ptr;
+
+    uint64 current_range_end_va = next_vma_range_start_va + length;
+
+    if (current_process_ptr->max_mmap_range_end_va < current_range_end_va) {
+        current_process_ptr->max_mmap_range_end_va = current_range_end_va;
+    }
+
+    return next_vma_range_start_va;
+}
+
+// return -1 if failed
+static int _check_if_is_valid_addr_and_get_vma_offset(
+    struct proc *current_process_ptr, uint64 addr, int length
+) {
+    uint64 target_range_start_va = addr;
+    uint64 target_range_end_va = target_range_start_va + length;
+
+    // printf(
+    //     "[_check_if_is_valid_addr_and_get_vma_offset] target_range_start_va:
+    //     "
+    //     "%p\n",
+    //     target_range_start_va
+    // );
+    // printf(
+    //     "[_check_if_is_valid_addr_and_get_vma_offset] target_range_end_va: "
+    //     "%p\n",
+    //     target_range_end_va
+    // );
+
+    for (int vma_offset = 0; vma_offset < NVMA; vma_offset++) {
+        struct vma *vma_ptr =
+            current_process_ptr->mapped_vma_ranges[vma_offset];
+
+        if (!vma_ptr) {
+            continue;
+        }
+
+        uint64 vma_range_start_va = vma_ptr->range_start_va;
+        uint64 vma_range_end_va = vma_range_start_va + vma_ptr->range_size;
+
+        // printf(
+        //     "[_check_if_is_valid_addr_and_get_vma_offset] vma_offset: %d\n",
+        //     vma_offset
+        // );
+        // printf(
+        //     "[_check_if_is_valid_addr_and_get_vma_offset] vma_ptr: %p\n",
+        //     (uint64)vma_ptr
+        // );
+        // printf(
+        //     "[_check_if_is_valid_addr_and_get_vma_offset] vma_range_start_va:
+        //     "
+        //     "%p\n",
+        //     vma_range_start_va
+        // );
+        // printf(
+        //     "[_check_if_is_valid_addr_and_get_vma_offset] vma_range_end_va: "
+        //     "%p\n",
+        //     vma_range_end_va
+        // );
+
+        // no overlap
+        if (target_range_end_va <= vma_range_start_va
+            || vma_range_end_va <= target_range_start_va) {
+            // printf("[_check_if_is_valid_addr_and_get_vma_offset] no
+            // overlap\n");
+
+            continue;
+        }
+
+        // overlap but out of bound
+        else if (target_range_start_va < vma_range_start_va || target_range_end_va > vma_range_end_va) {
+            // printf("[_check_if_is_valid_addr_and_get_vma_offset] overlap but
+            // "
+            //    "out of bound\n");
+
+            return -1;
+        }
+
+        // inside the vma but punch a hole of it
+        else if (target_range_start_va > vma_range_start_va && target_range_end_va < vma_range_end_va) {
+            // printf("[_check_if_is_valid_addr_and_get_vma_offset] inside the "
+            //    "vma but punch a hole of it\n");
+
+            return -1;
+        }
+
+        else {
+            // printf("[_check_if_is_valid_addr_and_get_vma_offset] success\n");
+
+            return vma_offset;
+        }
+    }
+
+    return -1;
+}
+
+static void _write_back_to_file(struct vma *vma_ptr, uint64 addr, int length) {
+    struct inode *inode_ptr = get_inode(vma_ptr->backed_file_ptr);
+
+    begin_op();
+
+    ilock(inode_ptr);
+
+    uint off = vma_ptr->backed_file_offset + (addr - vma_ptr->range_start_va);
+
+    writei(inode_ptr, 1, addr, off, length);
+
+    iunlock(inode_ptr);
+
+    end_op();
+}
+
+static void _write_back_to_file_and_unmap_physical_pages(
+    struct proc *current_process_ptr,
+    int vma_offset,
+    struct vma *vma_ptr,
+    uint64 addr,
+    int length
+) {
+    if (vma_ptr->writable && vma_ptr->need_write_back) {
+        _write_back_to_file(vma_ptr, addr, length);
+    }
+
+    pagetable_t pagetable = current_process_ptr->pagetable;
+    uint64 aligned_page_start_va;
+    uint64 aligned_page_end_va;
+
+    if (addr == vma_ptr->range_start_va) {
+        aligned_page_start_va = PGROUNDDOWN(addr);
+
+        if (length == vma_ptr->range_size) {
+            aligned_page_end_va = PGROUNDUP(addr + length);
+
+            vma_ptr->backed_file_offset = -1;
+            vma_ptr->range_start_va = -1;
+            vma_ptr->range_size = 0;
+        }
+
+        else {
+            aligned_page_end_va = PGROUNDDOWN(addr + length);
+
+            vma_ptr->backed_file_offset += length;
+            vma_ptr->range_start_va += length;
+            vma_ptr->range_size -= length;
+        }
+    }
+
+    else if (addr + length == vma_ptr->range_start_va + vma_ptr->range_size) {
+        aligned_page_start_va = PGROUNDUP(addr);
+        aligned_page_end_va = PGROUNDUP(addr + length);
+
+        vma_ptr->range_size -= length;
+    }
+
+    // don't need to implement in this lab
+    else {
+        panic("never reaches here");
+    }
+
+    deallocate_physical_pages_in_range_selectively(
+        pagetable, aligned_page_start_va, aligned_page_end_va
+    );
+
+    if (vma_ptr->range_size == 0) {
+        fileclose(vma_ptr->backed_file_ptr);
+
+        _deallocate_vma_to_global_pool(vma_ptr);
+
+        current_process_ptr->mapped_vma_ranges[vma_offset] = 0;
+    }
+}
+
+// unmap only the physical pages inside the given range (while the page table
+// pages still being allocated), and write back all modified blocks to the
+// backed file
+uint64 munmap(uint64 addr, int length) {
+    struct proc *current_process_ptr = myproc();
+
+    int vma_offset = _check_if_is_valid_addr_and_get_vma_offset(
+        current_process_ptr, addr, length
+    );
+
+    if (vma_offset == -1) {
+        // printf("[munmap] invalid addr\n");
+
+        return -1;
+    }
+
+    // guaranteed to be non-null since the returned vma_offset is non-null
+    struct vma *vma_ptr = current_process_ptr->mapped_vma_ranges[vma_offset];
+
+    _write_back_to_file_and_unmap_physical_pages(
+        current_process_ptr, vma_offset, vma_ptr, addr, length
+    );
+
+    return 0;
+}
+
+static void _free_mmap_page_table_pages(struct proc *current_process_ptr) {
+    pagetable_t pagetable = current_process_ptr->pagetable;
+    uint64 aligned_page_start_va = MMAPBASE;
+    uint64 aligned_page_end_va =
+        PGROUNDUP(current_process_ptr->max_mmap_range_end_va);
+
+    deallocate_pagetable_pages_in_range_selectively(
+        pagetable, aligned_page_start_va, aligned_page_end_va
+    );
+}
+
+// unmap all the physical pages and page table pages in the entire mmap region
+// starting at MMAPBASE, and write back all modified blocks to the backed file
+static void _munmap_all(struct proc *current_process_ptr) {
+    for (int vma_offset = 0; vma_offset < NVMA; vma_offset++) {
+        struct vma *vma_ptr =
+            current_process_ptr->mapped_vma_ranges[vma_offset];
+
+        if (!vma_ptr) {
+            continue;
+        }
+
+        uint64 addr = vma_ptr->range_start_va;
+        int length = (int)vma_ptr->range_size;
+
+        _write_back_to_file_and_unmap_physical_pages(
+            current_process_ptr, vma_offset, vma_ptr, addr, length
+        );
+    }
+
+    _free_mmap_page_table_pages(current_process_ptr);
 }

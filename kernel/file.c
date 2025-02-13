@@ -92,6 +92,22 @@ int filestat(struct file *f, uint64 addr) {
     return -1;
 }
 
+int is_normal_file(struct file *f) {
+    return f->type == FD_INODE;
+}
+
+int is_readable(struct file *f) {
+    return f->readable;
+}
+
+int is_writable(struct file *f) {
+    return f->writable;
+}
+
+struct inode *get_inode(struct file *f) {
+    return f->ip;
+}
+
 // Read from file f.
 // addr is a user virtual address.
 int fileread(struct file *f, uint64 addr, int n) {

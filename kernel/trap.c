@@ -25,6 +25,155 @@ void trapinithart(void) {
     w_stvec((uint64)kernelvec);
 }
 
+// return 0 if failed
+static struct vma *_get_vma_ptr_of_process_by_request_va(
+    struct proc *current_process_ptr, uint64 request_va
+) {
+    for (int vma_offset = 0; vma_offset < NVMA; vma_offset++) {
+        struct vma *vma_ptr =
+            current_process_ptr->mapped_vma_ranges[vma_offset];
+
+        if (!vma_ptr) {
+            continue;
+        }
+
+        uint64 vma_range_start_va = vma_ptr->range_start_va;
+        uint64 vma_range_end_va = vma_range_start_va + vma_ptr->range_size;
+
+        if (vma_range_start_va <= request_va && request_va < vma_range_end_va) {
+            return vma_ptr;
+        }
+    }
+
+    return 0;
+}
+
+// return 0 if failed
+static int _check_file_permission(struct vma *vma_ptr, uint64 scause) {
+    if (scause == 13) {
+        return vma_ptr->readable;
+    }
+
+    else if (scause == 17) {
+        return vma_ptr->writable;
+    }
+
+    else {
+        return 0;
+    }
+}
+
+// return 0 if failed
+static int _load_page_from_file(
+    struct proc *current_process_ptr, struct vma *vma_ptr, uint64 request_va
+) {
+    // printf("[_load_page_from_file] enter\n");
+
+    if (!vma_ptr) {
+        panic("_load_page_from_file: never reaches here");
+    }
+
+    uint64 new_page_pa = (uint64)kalloc();
+
+    // out of memory
+    if (new_page_pa == 0) {
+        // printf("[_load_page_from_file] OOM\n");
+
+        return 0;
+    }
+
+    int perm = PTE_U;
+
+    if (vma_ptr->readable) {
+        perm |= PTE_R;
+    }
+
+    if (vma_ptr->writable) {
+        perm |= PTE_W;
+    }
+
+    uint64 page_start_va = PGROUNDDOWN(request_va);
+
+    if (mappages(
+            current_process_ptr->pagetable,
+            page_start_va,
+            PGSIZE,
+            new_page_pa,
+            perm
+        )
+        != 0) {
+
+        kfree((void *)new_page_pa);
+
+        // printf("[_load_page_from_file] failed to map page\n");
+
+        return 0;
+    }
+
+    struct inode *inode_ptr = get_inode(vma_ptr->backed_file_ptr);
+
+    uint64 dst = page_start_va >= vma_ptr->range_start_va
+                     ? page_start_va
+                     : vma_ptr->range_start_va;
+
+    uint off = vma_ptr->backed_file_offset + (dst - vma_ptr->range_start_va);
+
+    uint64 end = (page_start_va + PGSIZE
+                  <= vma_ptr->range_start_va + vma_ptr->range_size)
+                     ? (page_start_va + PGSIZE)
+                     : (vma_ptr->range_start_va + vma_ptr->range_size);
+
+    uint n = end - dst;
+
+    printf(
+        "[_load_page_from_file] inode_ptr: %p, dst: %p, off: %d, n: %d\n",
+        (uint64)inode_ptr,
+        dst,
+        off,
+        n
+    );
+
+    begin_op();
+
+    ilock(inode_ptr);
+
+    n = readi(inode_ptr, 1, dst, off, n);
+
+    iunlock(inode_ptr);
+
+    end_op();
+
+    if (n == (uint)-1) {
+        // deallocate_physical_pages_in_range_selectively(
+        //     current_process_ptr->pagetable,
+        //     page_start_va,
+        //     page_start_va + PGSIZE
+        // );
+
+        // printf("[_load_page_from_file] failed to read from file\n");
+
+        // return 0;
+
+        panic("[_load_page_from_file] never reaches here");
+    }
+
+    end = dst + n;
+
+    if (dst > page_start_va) {
+        memset((char *)new_page_pa, 0, dst - page_start_va);
+    }
+
+    if (page_start_va + PGSIZE > end) {
+        memset(
+            (char *)(new_page_pa + (end - page_start_va)),
+            0,
+            (page_start_va + PGSIZE) - end
+        );
+    }
+
+    return 1;
+}
+
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -60,9 +209,37 @@ void usertrap(void) {
 
         syscall();
     }
+
+    // load/store page fault
+    else if (r_scause() == 13 || r_scause() == 15) {
+        // printf("[xbhuang] usertrap\n");
+
+        uint64 request_va = r_stval();
+
+        // printf("[xbhuang] p->pid: %d\n", p->pid);
+        // printf("[xbhuang] p->sz: %p\n", (uint64)p->sz);
+        // printf("[xbhuang] p->trapframe->sp: %p\n", p->trapframe->sp);
+        // printf("[xbhuang] request_va: %p\n", request_va);
+
+        struct vma *vma_ptr =
+            _get_vma_ptr_of_process_by_request_va(p, request_va);
+
+        // out of bound or permission denied
+        if (!vma_ptr || !_check_file_permission(vma_ptr, r_scause())) {
+            p->killed = 1;
+        }
+
+        else if (!_load_page_from_file(p, vma_ptr, request_va)) {
+            // printf("[usertrap] killed process, PID: %d\n", myproc()->pid);
+
+            p->killed = 1;
+        }
+    }
+
     else if ((which_dev = devintr()) != 0) {
         // ok
     }
+
     else {
         printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
         printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
