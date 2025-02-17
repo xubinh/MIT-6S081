@@ -1,38 +1,21 @@
-# Lab Utilities
+# util
 
-## <a id="toc"></a>目录
+## Boot xv6 (easy)
 
-<details open="open"><summary><a href="#1">Lab util (得分: 100/100)</a></summary>
+大纲:
 
-- <a href="#1.1">Boot xv6 (easy)</a>
-- <a href="#1.2">sleep (easy)</a>
-- <a href="#1.3">pingpong (easy)</a>
-- <a href="#1.4">primes (moderate)/(hard)</a>
-- <a href="#1.5">find (moderate)</a>
-- <a href="#1.6">xargs (moderate)</a>
+- [x] 搭建环境.
+- [x] 克隆仓库.
+- [x] `git checkout` 至 `util` 分支.
+- [x] `make qemu` 开机.
 
-</details>
-<details open="open"><summary><a href="#2">测试与评分相关</a></summary>
-</details>
-
-## <a id="1"></a>Lab util (得分: 100/100)
-
-### <a id="1.1"></a>Boot xv6 (easy)
-
-开机过程概述:
-
-- 搭建环境;
-- 克隆仓库;
-- `git checkout` 至 `util` 分支;
-- `make qemu` 开机.
-
-一些注意事项:
+注意事项:
 
 - 可以使用 `ls` 命令列出当前目录下的文件.
 - xv6 中没有 `ps` 命令, 可以使用 `Ctrl-p` 替代.
 - 输入 `Ctrl-a` + `x` 即可退出 xv6.
 
-### <a id="1.2"></a>sleep (easy)
+## sleep (easy)
 
 内核中与进程睡眠有关的核心函数是位于文件 `kernel/proc.c` 中的 `sleep` 函数 (以下代码摘自该文件):
 
@@ -132,18 +115,14 @@ sleep:
 
 为了实现用户版本的 `sleep` 函数, 需要 (1) 获取并检查参数, 必要时输出错误信息, 然后 (2) 调用系统调用版本的 `sleep` 函数.
 
-一些注意事项:
+注意事项:
 
 - **`main` 函数必须以系统调用 `exit` 结尾**.
 - 可以使用 `user/ulib.c` 中的 `atoi` 函数将字符串转换为整数.
 - 完成后将 `sleep` 函数追加到 Makefile 中的 `UPROGS` 变量中 (这个变量中包含的是一系列用户可调用的二进制程序, 例如 `echo` 和 `grep` 等等). 注意添加的形式是 `_sleep` 而不是 `sleep`. 之后 `make qemu` 会负责编译这个函数并能够在 shell 中调用该函数.
 - 如果在编译的时候提示缺失如 `uint` 之类的类型, 这是因为 xv6 的源码中头文件的 include 是依赖先后顺序的, 可以通过在头文件中添加 `#ifndef` 预处理命令并手动 include 的方法解决.
 
-具体代码见文件 [user/sleep.c](user/sleep.c).
-
-<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
-
-### <a id="1.3"></a>pingpong (easy)
+## pingpong (easy)
 
 实验要求很明确, 目的是为了熟悉 `fork` 创建进程, `pipe` 创建命名管道以便进程间通信, `read` 和 `write` 进行读写, `getpid` 获取当前进程 ID.
 
@@ -154,15 +133,11 @@ sleep:
 
 至于输出信息, 需要用到 `printf` 函数, 这个函数要去 `user/printf.c` 中查看.
 
-一些注意事项:
+注意事项:
 
 - `printf` 只识别 `%d, %x, %p, %s`.
 
-具体代码见文件 [user/pingpong.c](user/pingpong.c).
-
-<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
-
-### <a id="1.4"></a>primes (moderate)/(hard)
+## primes (moderate)/(hard)
 
 实验要求实现一个埃氏筛法来打印素数, 但不是通过一般的循环语句实现, 而是通过进程间通信的形式将本轮循环中的结果传递给下一个进程处理.
 
@@ -172,16 +147,12 @@ sleep:
 - 主进程和所有子进程的分工很明确, 前者负责启动子进程链并输入所有整数, 每个子进程负责从自己的父进程读取输入, 输出传入的第一个整数即素数, 然后一旦发现有整数没有被筛掉便创建一个子进程并将该整数和接下来所有没有被筛掉的整数输入给该子进程.
 - 关键是如何配合 `fork` 编织子进程的逻辑. 由于每个新创建的子进程均需要重新回到相同的入口开始执行, 因此可以用函数将子进程的逻辑抽象出来并在 `fork` 之后调用. 但这样做会导致用户栈随着子进程链的推进而不断增大, 因此可以选择通过 `while` 循环配合 `continue` 或者直接 `goto` 的方法实现.
 
-一些注意事项:
+注意事项:
 
 - 注意使用 `wait` 等待的是直接子进程, 子进程创建的子进程不算在父进程的直接子进程中.
 - 父进程需要在等待子进程之前将管道的写端先关闭, 否则子进程会由于读取不到 EOF 而一直阻塞从而卡死整个进程.
 
-具体代码见文件 [user/primes.c](user/primes.c).
-
-<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
-
-### <a id="1.5"></a>find (moderate)
+## find (moderate)
 
 实验的目的是为了熟悉文件系统相关的系统调用以及文件路径处理.
 
@@ -222,18 +193,14 @@ struct stat {
 };
 ```
 
-一些注意事项:
+注意事项:
 
 - 务必记得排除 `.` 和 `..` 这两个目录, 避免循环遍历.
 - 对字符串进行操作时务必仔细分析, 稍有不慎就会造成微妙难以察觉的 BUG.
 - `stat` 和 `fstat` 函数分别用于通过文件名和文件描述符获取文件元数据, 主要用于区分文件是普通文件还是目录文件.
 - `open` 函数用于打开目录文件并读取条目, 条目的类型为 `dirent`, 其中包含文件名.
 
-具体代码见文件 [user/find.c](user/find.c).
-
-<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
-
-### <a id="1.6"></a>xargs (moderate)
+## xargs (moderate)
 
 要求实现一个简单版本的 `xargs` 程序, 作用是从标准输入读取文本, 将文本内容中的每一行作为一个单独的参数传递给 `xargs` 的参数所指明的程序. 通过 `xargs` 的参数可以为所指明的程序预先指定若干个固定参数, 而从 `xargs` 的标准输入中读取到的单独参数应该追加在这些固定参数之后. 例如:
 
@@ -252,18 +219,14 @@ line 3 4
 
 思路很简单, 主进程负责读取标准输入, 获取传入的指定程序和参数, 循环构建子进程的命令行参数数组并调用 `fork`. 子进程负责调用 `exec` 执行指定程序, 父进程负责等待子进程完成并继续下一轮循环.
 
-一些注意事项:
+注意事项:
 
 - 读取标准输入的时候可以选择带缓冲区地处理, 也可以选择逐字符读取并在遇到换行符的时候切断.
 - 构建子进程的 argv 的时候可以使用 `kernel/param.h` 中定义的 `MAXARG` 宏指定数组大小.
 - 一定要注意传递给子进程的可执行文件名位于 `xargs` 的 `argv` 数组的下标为 1 的字符串中, 如果错将下标为 0 的字符串传入给子进程会造成递归调用并产生意想不到的效果.
 - 在 `exec` 系统调用中, 遍历传入的 `argv` 时一旦遇到空指针则停止, 因此可以将 `argv` 初始化为全 0 来起到和额外传入一个 `arvc` 一样的作用.
 
-具体代码见文件 [user/xargs.c](user/xargs.c).
-
-<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
-
-## <a id="2"></a>测试与评分相关
+## 测试相关
 
 运行所有测试:
 
@@ -281,4 +244,4 @@ make grade
 make GRADEFLAGS=<function-name> grade
 ```
 
-<div align="right"><b><a href="#toc">返回顶部↑</a></b></div>
+也可以通过在 qemu 内部直接运行 usertests 来进行测试.
