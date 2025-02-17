@@ -2,19 +2,19 @@
 
 > [!IMPORTANT]
 >
-> - xv6 教材笔记与源码解析敬请移步至[我的博客](https://xubinh.github.io/tags/xv6/).
 > - 根据实验的设计形式, 本项目使用独立的分支分别展现各个实验的结果, 具体请移步至对应分支查看:
->   - [Lab Utilities](https://github.com/xubinh/MIT-6S081/tree/util)
->   - [Lab System calls](https://github.com/xubinh/MIT-6S081/tree/syscall)
->   - Lab Page tables [TODO]
->   - Lab Traps [TODO]
->   - Lab Lazy allocation [TODO]
->   - Lab Copy on-write [TODO]
->   - Lab Multithreading [TODO]
->   - Lab Lock [TODO]
->   - Lab File system [TODO]
->   - Lab mmap [TODO]
+>   - [Lab Utilities](https://github.com/xubinh/MIT-6S081/tree/util) ✔️
+>   - [Lab System calls](https://github.com/xubinh/MIT-6S081/tree/syscall) ✔️
+>   - [Lab Page tables](https://github.com/xubinh/MIT-6S081/tree/pgtbl) ✔️
+>   - [Lab Traps](https://github.com/xubinh/MIT-6S081/tree/traps) ✔️
+>   - [Lab Lazy allocation](https://github.com/xubinh/MIT-6S081/tree/lazy) ✔️
+>   - [Lab Copy on-write](https://github.com/xubinh/MIT-6S081/tree/cow) ✔️
+>   - [Lab Multithreading](https://github.com/xubinh/MIT-6S081/tree/thread) ✔️
+>   - [Lab Lock](https://github.com/xubinh/MIT-6S081/tree/lock) ✔️
+>   - [Lab File system](https://github.com/xubinh/MIT-6S081/tree/fs) ✔️
+>   - [Lab mmap](https://github.com/xubinh/MIT-6S081/tree/mmap) ✔️
 >   - Lab network driver [TODO]
+> - xv6 教材笔记与源码解析敬请移步至[我的博客](https://xubinh.github.io/tags/xv6/).
 
 本分支主要介绍实验前的一些准备工作, 其中的内容均摘自 (或翻译自) 以下官方网站中的内容:
 
